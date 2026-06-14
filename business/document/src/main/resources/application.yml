@@ -1,0 +1,90 @@
+# =============================================================================
+# reuben-agent 本地开发配置
+# 对应 docker-compose.yml 中的中间件服务
+# =============================================================================
+
+spring:
+  application:
+    name: reuben-agent
+
+  # ---------------------------------------------------------------------------
+  # MySQL 8.0 — 关系型数据
+  # ---------------------------------------------------------------------------
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/reuben_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root123
+
+  # ---------------------------------------------------------------------------
+  # Redis — ID生成器 WorkerID 分配 + 分布式锁
+  # ---------------------------------------------------------------------------
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      # 本地单机无密码
+
+  # ---------------------------------------------------------------------------
+  # Elasticsearch 8.x
+  # ---------------------------------------------------------------------------
+  elasticsearch:
+    uris: http://127.0.0.1:9200
+    connection-timeout: 3s
+    socket-timeout: 5s
+
+  # ---------------------------------------------------------------------------
+  # Neo4j 5.x
+  # ---------------------------------------------------------------------------
+  neo4j:
+    uri: bolt://127.0.0.1:7687
+    authentication:
+      username: neo4j
+      password: neo4j123
+
+  # ---------------------------------------------------------------------------
+  # Kafka 3.8
+  # ---------------------------------------------------------------------------
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: reuben-agent-document
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: com.reubenagent.*
+
+# =============================================================================
+# reuben-agent 业务模块配置
+# =============================================================================
+reuben:
+  document:
+    minio:
+      endpoint: http://127.0.0.1:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket-name: reuben-agent-document
+      object-prefix: rag/document
+
+# =============================================================================
+# MyBatis-Plus
+# =============================================================================
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: is_deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# =============================================================================
+# 日志
+# =============================================================================
+logging:
+  level:
+    com.reubenagent: debug

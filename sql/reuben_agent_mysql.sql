@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS `reuben_agent_document` (
     `document_name` VARCHAR(512) DEFAULT NULL COMMENT '文档名称',
     `original_file_name` VARCHAR(512) DEFAULT NULL COMMENT '原始文件名',
     `file_type` TINYINT DEFAULT NULL COMMENT '文件类型: 1=PDF 2=DOC 3=DOCX 4=TXT 5=MD 6=HTML',
-    `mime_type` VARCHAR(128) DEFAULT NULL COMMENT 'MIME类型',
+    `media_type` VARCHAR(128) DEFAULT NULL COMMENT 'MIME类型',
     `file_size` BIGINT DEFAULT NULL COMMENT '文件大小(byte)',
     `storage_type` TINYINT DEFAULT NULL COMMENT '存储类型: 1=MinIO',
     `bucket_name` VARCHAR(128) DEFAULT NULL COMMENT 'Bucket名称',
@@ -27,26 +27,26 @@ CREATE TABLE IF NOT EXISTS `reuben_agent_document` (
     `token_count` INT DEFAULT NULL COMMENT '解析后token估算数',
     `structure_level` TINYINT DEFAULT 0 COMMENT '结构层级: 0=未知 1=低 2=中 3=高',
     `content_quality_level` TINYINT DEFAULT 0 COMMENT '内容质量: 0=未知 1=低 2=中 3=高',
-    `parse_text_path` VARCHAR(512) DEFAULT NULL COMMENT '解析文本存储路径',
+    `parse_success_text_path` VARCHAR(512) DEFAULT NULL COMMENT '解析文本存储路径',
     `parse_error_msg` VARCHAR(1024) DEFAULT NULL COMMENT '解析失败原因',
     `knowledge_scope_code` VARCHAR(128) DEFAULT NULL COMMENT '业务知识域编码',
     `knowledge_scope_name` VARCHAR(256) DEFAULT NULL COMMENT '业务知识域名称',
     `business_category` VARCHAR(256) DEFAULT NULL COMMENT '业务分类',
     `document_tags` VARCHAR(1024) DEFAULT NULL COMMENT '逗号分隔标签快照',
-    `current_plan_id` BIGINT DEFAULT NULL COMMENT '当前策略方案id',
-    `last_parse_task_id` BIGINT DEFAULT NULL COMMENT '最近一次成功解析任务id',
+    `current_strategy_plan_id` BIGINT DEFAULT NULL COMMENT '当前策略方案id',
+    `latest_parse_task_id` BIGINT DEFAULT NULL COMMENT '最近一次成功解析任务id',
     `structure_node_count` INT DEFAULT NULL COMMENT '结构化解析生成的节点数',
-    `last_index_task_id` BIGINT DEFAULT NULL COMMENT '最近一次索引任务id',
+    `latest_index_task_id` BIGINT DEFAULT NULL COMMENT '最近一次索引任务id',
     `create_time` DATETIME DEFAULT NULL COMMENT '创建时间',
-    `edit_time` DATETIME DEFAULT NULL COMMENT '修改时间',
-    `status` TINYINT DEFAULT 1 COMMENT '1=正常 0=已删除',
+    `update_time` DATETIME DEFAULT NULL COMMENT '修改时间',
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
     PRIMARY KEY (`id`),
     KEY `idx_object_name` (`object_name`(128)),
     KEY `idx_parse_status` (`parse_status`),
     KEY `idx_strategy_status` (`strategy_status`),
     KEY `idx_index_status` (`index_status`),
     KEY `idx_knowledge_scope_code` (`knowledge_scope_code`),
-    KEY `idx_current_plan_id` (`current_plan_id`)
+    KEY `idx_current_strategy_plan_id` (`current_strategy_plan_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档主表';
 
 -- ---------------------------------------------------------------------------
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS `reuben_agent_document_strategy_step` (
 CREATE TABLE IF NOT EXISTS `reuben_agent_document_task` (
     `id` BIGINT NOT NULL COMMENT '主键',
     `document_id` BIGINT NOT NULL COMMENT '文档id',
-    `plan_id` BIGINT DEFAULT NULL COMMENT '执行方案id',
+    `strategy_plan_id` BIGINT DEFAULT NULL COMMENT '执行方案id',
     `task_type` TINYINT DEFAULT NULL COMMENT '任务类型: 1=解析路由 2=构建索引',
     `task_status` TINYINT DEFAULT 1 COMMENT '任务状态: 1=新建 2=进行中 3=成功 4=失败 5=已取消',
     `current_stage` TINYINT DEFAULT NULL COMMENT '当前阶段',
@@ -116,12 +116,12 @@ CREATE TABLE IF NOT EXISTS `reuben_agent_document_task` (
     `error_msg` VARCHAR(1024) DEFAULT NULL COMMENT '错误信息',
     `ext_json` TEXT DEFAULT NULL COMMENT '扩展信息JSON',
     `create_time` DATETIME DEFAULT NULL,
-    `edit_time` DATETIME DEFAULT NULL,
-    `status` TINYINT DEFAULT 1,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
     PRIMARY KEY (`id`),
     KEY `idx_document_task` (`document_id`),
     KEY `idx_task_status` (`task_status`),
-    KEY `idx_plan_id` (`plan_id`)
+    KEY `idx_strategy_plan_id` (`strategy_plan_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档任务';
 
 -- ---------------------------------------------------------------------------
@@ -139,8 +139,8 @@ CREATE TABLE IF NOT EXISTS `reuben_agent_document_task_log` (
     `content` VARCHAR(2048) DEFAULT NULL COMMENT '日志内容',
     `detail_json` TEXT DEFAULT NULL COMMENT '日志明细JSON',
     `create_time` DATETIME DEFAULT NULL,
-    `edit_time` DATETIME DEFAULT NULL,
-    `status` TINYINT DEFAULT 1,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
     PRIMARY KEY (`id`),
     KEY `idx_task_id` (`task_id`),
     KEY `idx_document_id` (`document_id`),
