@@ -16,10 +16,11 @@ public enum DocumentTaskTypeEnum {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     public static DocumentTaskTypeEnum getFromCode(Integer code) {
+        if (code == null) { return null; }
         for (DocumentTaskTypeEnum item : DocumentTaskTypeEnum.values()) {
             if (item.code.intValue() == code.intValue()) {
                 return item;

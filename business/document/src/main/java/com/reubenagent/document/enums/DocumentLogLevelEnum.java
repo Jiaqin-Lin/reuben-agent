@@ -17,10 +17,11 @@ public enum DocumentLogLevelEnum {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     public static DocumentLogLevelEnum getFromCode(Integer code) {
+        if (code == null) { return null; }
         for (DocumentLogLevelEnum item : DocumentLogLevelEnum.values()) {
             if (item.code.intValue() == code.intValue()) {
                 return item;

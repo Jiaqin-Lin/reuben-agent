@@ -34,6 +34,6 @@ public enum BaseCode {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 }

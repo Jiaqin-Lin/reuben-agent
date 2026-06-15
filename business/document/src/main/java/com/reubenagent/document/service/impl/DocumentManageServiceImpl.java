@@ -70,7 +70,7 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
                 .bucketName(storedObjectInfo.getBucketName())
                 .objectName(storedObjectInfo.getObjectName())
                 .objectUrl(storedObjectInfo.getObjectUrl())
-                .parseStatus(DocumentParseStatusEnum.PARSING.getCode())
+                .parseStatus(DocumentParseStatusEnum.WAIT_TO_PARSE.getCode())
                 .strategyStatus(DocumentStrategyStatusEnum.WAIT_TO_RECOMMEND.getCode())
                 .indexStatus(DocumentIndexStatusEnum.WAIT_TO_BUILD.getCode())
                 .charCount(0)

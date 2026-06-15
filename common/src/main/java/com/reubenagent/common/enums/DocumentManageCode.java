@@ -30,6 +30,6 @@ public enum DocumentManageCode {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 }

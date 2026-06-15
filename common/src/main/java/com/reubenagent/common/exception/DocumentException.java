@@ -16,14 +16,14 @@ import lombok.Getter;
  * <h3>使用示例</h3>
  * <pre>{@code
  * // 文件为空
- * throw new DocumentException(DocumentManageCode.EMPTY_FILE_CONTENT);
+ * throw new DocumentException(DocumentManageCode.EMPTY_FILE);
  *
  * // 文件类型不支持 + 补充详情
  * throw new DocumentException(DocumentManageCode.UNSUPPORTED_FILE_TYPE,
  *     "仅支持 .pdf, .docx, .txt，当前: .exe");
  *
  * // MinIO 上传失败 + 根因
- * throw new DocumentException(DocumentManageCode.DOCUMENT_STORAGE_FAILED,
+ * throw new DocumentException(DocumentManageCode.MINIO_UPLOAD_FAIL,
  *     "上传到 MinIO 失败", e);
  * }</pre>
  *

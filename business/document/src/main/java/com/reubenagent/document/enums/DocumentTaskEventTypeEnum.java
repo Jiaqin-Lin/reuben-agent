@@ -20,10 +20,11 @@ public enum DocumentTaskEventTypeEnum {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     public static DocumentTaskEventTypeEnum getFromCode(Integer code) {
+        if (code == null) { return null; }
         for (DocumentTaskEventTypeEnum item : DocumentTaskEventTypeEnum.values()) {
             if (item.code.intValue() == code.intValue()) {
                 return item;

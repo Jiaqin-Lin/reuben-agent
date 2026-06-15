@@ -141,7 +141,7 @@ class DocumentManageServiceImplTest {
         assertThat(result.getDocumentId()).isEqualTo(100L);
         assertThat(result.getTaskId()).isEqualTo(200L);
         assertThat(result.getDocumentName()).isEqualTo("用户手册");
-        assertThat(result.getParseStatus()).isEqualTo(2);
+        assertThat(result.getParseStatus()).isEqualTo(1);
         assertThat(result.getStrategyStatus()).isEqualTo(1);
         assertThat(result.getIndexStatus()).isEqualTo(1);
 
@@ -158,7 +158,7 @@ class DocumentManageServiceImplTest {
         assertThat(doc.getObjectName()).startsWith("rag/document/100/");
         assertThat(doc.getObjectName()).contains("user_guide.pdf");
         assertThat(doc.getObjectUrl()).contains("reuben-agent-document");
-        assertThat(doc.getParseStatus()).isEqualTo(2);
+        assertThat(doc.getParseStatus()).isEqualTo(1);
         assertThat(doc.getStrategyStatus()).isEqualTo(1);
         assertThat(doc.getIndexStatus()).isEqualTo(1);
         assertThat(doc.getCharCount()).isZero();

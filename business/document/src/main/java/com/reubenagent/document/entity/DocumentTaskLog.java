@@ -22,10 +22,10 @@ public class DocumentTaskLog extends BaseTableData {
     @TableId(value = "id", type = IdType.INPUT)
     private Long id;
 
-    /** 关联的任务ID，关联 super_agent_document_task 表 */
+    /** 关联的任务ID，关联 reuben_agent_document_task 表 */
     private Long taskId;
 
-    /** 关联的文档ID，关联 super_agent_document 表（冗余字段，便于查询） */
+    /** 关联的文档ID，关联 reuben_agent_document 表（冗余字段，便于查询） */
     private Long documentId;
 
     /** 阶段类型 1=文件上传, 2=内容解析, 3=策略路由, 4=策略确认, 5=切块执行, 6=切块后处理, 7=向量化, 8=入库完成 */

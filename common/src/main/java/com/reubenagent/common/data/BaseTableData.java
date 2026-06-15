@@ -15,5 +15,6 @@ public class BaseTableData {
     @TableField(fill = FieldFill.INSERT_UPDATE)
     private Date updateTime;
 
-    private Integer isDeleted = 0; // 0 正常 1 逻辑删除
+    /** 逻辑删除标记：0=正常 1=已删除 */
+    private Integer isDeleted = 0;
 }

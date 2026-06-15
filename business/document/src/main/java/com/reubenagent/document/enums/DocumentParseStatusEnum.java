@@ -19,10 +19,11 @@ public enum DocumentParseStatusEnum {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     public static DocumentParseStatusEnum getFromCode(Integer code) {
+        if (code == null) { return null; }
         for (DocumentParseStatusEnum item : DocumentParseStatusEnum.values()) {
             if (item.code.intValue() == code.intValue()) {
                 return item;

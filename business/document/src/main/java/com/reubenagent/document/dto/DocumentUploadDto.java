@@ -5,7 +5,7 @@ import lombok.Data;
 @Data
 public class DocumentUploadDto {
 
-    /** 文档名称，上载文件的原始名称或用户指定的别名 */
+    /** 文档名称，上传文件的原始名称或用户指定的别名 */
     private String documentName;
 
     /** 操作人ID，记录上载文档的用户 */

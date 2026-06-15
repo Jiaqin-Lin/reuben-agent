@@ -18,10 +18,11 @@ public enum DocumentStrategyStatusEnum {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     public static DocumentStrategyStatusEnum getFromCode(Integer code) {
+        if (code == null) { return null; }
         for (DocumentStrategyStatusEnum item : DocumentStrategyStatusEnum.values()) {
             if (item.code.intValue() == code.intValue()) {
                 return item;

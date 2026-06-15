@@ -17,10 +17,11 @@ public enum DocumentTriggerSourceEnum {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     public static DocumentTriggerSourceEnum getFromCode(Integer code) {
+        if (code == null) { return null; }
         for (DocumentTriggerSourceEnum item : DocumentTriggerSourceEnum.values()) {
             if (item.code.intValue() == code.intValue()) {
                 return item;

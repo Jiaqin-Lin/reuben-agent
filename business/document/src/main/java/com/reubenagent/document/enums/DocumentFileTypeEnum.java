@@ -16,7 +16,7 @@ public enum DocumentFileTypeEnum {
     private final String msg;
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     DocumentFileTypeEnum(Integer code, String msg) {
@@ -25,6 +25,7 @@ public enum DocumentFileTypeEnum {
     }
 
     public static DocumentFileTypeEnum getFromCode(Integer code) {
+        if (code == null) { return null; }
         for (DocumentFileTypeEnum item : DocumentFileTypeEnum.values()) {
             if (item.code.intValue() == code.intValue()) {
                 return item;
