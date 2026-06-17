@@ -2,6 +2,12 @@ package com.reubenagent.document.dto;
 
 import lombok.Data;
 
+/**
+ * 文档上传请求体 —— 上传时附带的元数据，所有字段均为可选。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 @Data
 public class DocumentUploadDto {
 

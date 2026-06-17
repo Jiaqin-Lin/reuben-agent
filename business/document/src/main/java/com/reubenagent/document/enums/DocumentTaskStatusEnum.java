@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 任务状态枚举 —— 异步任务的通用生命周期。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentTaskStatusEnum {
     NEW(1, "新建"),
     RUNNING(2, "进行中"),

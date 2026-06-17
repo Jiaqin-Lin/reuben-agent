@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 文档策略状态枚举 —— 解析策略（切分方案/LLM 路由）的推荐-确认-失效生命周期。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentStrategyStatusEnum {
     WAIT_TO_RECOMMEND(1, "待推荐"),
     RECOMMENDED(2, "已推荐"),

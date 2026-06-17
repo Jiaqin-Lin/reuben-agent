@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 文档解析状态枚举 —— 文件内容提取（Tika/OCR）的生命周期。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentParseStatusEnum {
     WAIT_TO_PARSE(1, "待解析"),
     PARSING(2, "解析中"),

@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 文档索引状态枚举 —— 向量索引（ES/PgVector）的构建生命周期。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentIndexStatusEnum {
     WAIT_TO_BUILD(1, "待构建"),
     BUILDING(2, "构建中"),

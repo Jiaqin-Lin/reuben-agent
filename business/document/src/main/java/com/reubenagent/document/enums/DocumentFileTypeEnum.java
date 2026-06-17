@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 支持的文件类型枚举 —— 定义系统可处理的文档格式。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentFileTypeEnum {
     PDF(1, "PDF"),
     DOC(2, "DOC"),

@@ -67,7 +67,7 @@ public class Document extends BaseTableData {
     /** 结构化程度：0=未知, 1=低, 2=中, 3=高 */
     private Integer structureLevel;
 
-    /** 内容质量：0=未知, 1=低, 2=中, 3=高 */
+    /** 内容质量：0=未知, 1=低, 2=中低, 3=中, 4=中高, 5=高 */
     private Integer contentQualityLevel;
 
     /** 解析后纯文本的存储路径 */

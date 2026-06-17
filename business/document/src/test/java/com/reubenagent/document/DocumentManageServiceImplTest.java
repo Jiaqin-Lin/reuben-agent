@@ -1,7 +1,6 @@
 package com.reubenagent.document;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.handlers.MetaObjectHandler;
 import com.reubenagent.document.dto.DocumentUploadDto;
 import com.reubenagent.document.entity.Document;
 import com.reubenagent.document.entity.DocumentTask;
@@ -12,23 +11,18 @@ import com.reubenagent.document.mapper.IDocumentTaskMapper;
 import com.reubenagent.document.service.IDocumentManageService;
 import com.reubenagent.document.vo.DocumentUploadVo;
 import com.reubenagent.framework.uid.UidGenerator;
-import org.apache.ibatis.reflection.MetaObject;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.Date;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -51,35 +45,10 @@ import static org.mockito.Mockito.when;
  *   <li>UidGenerator — Mock</li>
  * </ul>
  */
-@SpringBootTest(classes = DocumentManageServiceImplTest.TestApp.class)
+@SpringBootTest(classes = DocumentTestConfig.TestApp.class)
 @ActiveProfiles("test")
-@Import(DocumentManageServiceImplTest.TestMetaConfig.class)
+@Import(DocumentTestConfig.TestMetaConfig.class)
 class DocumentManageServiceImplTest {
-
-    @SpringBootApplication(scanBasePackages = "com.reubenagent.document")
-    static class TestApp {
-    }
-
-    @TestConfiguration
-    static class TestMetaConfig {
-        @Bean
-        MetaObjectHandler metaObjectHandler() {
-            return new MetaObjectHandler() {
-                @Override
-                public void insertFill(MetaObject metaObject) {
-                    Date now = new Date();
-                    this.strictInsertFill(metaObject, "createTime", Date.class, now);
-                    this.strictInsertFill(metaObject, "updateTime", Date.class, now);
-                    this.strictInsertFill(metaObject, "isDeleted", Integer.class, 0);
-                }
-
-                @Override
-                public void updateFill(MetaObject metaObject) {
-                    this.strictUpdateFill(metaObject, "updateTime", Date.class, new Date());
-                }
-            };
-        }
-    }
 
     @MockBean
     private UidGenerator uidGenerator;
@@ -103,13 +72,8 @@ class DocumentManageServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task_log");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task");
-        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document");
-
-        createDocumentTable();
-        createDocumentTaskTable();
-        createDocumentTaskLogTable();
+        DocumentTestSchema.dropTables(jdbcTemplate);
+        DocumentTestSchema.createAllTables(jdbcTemplate);
 
         uidSeq.set(100);
         when(uidGenerator.getUid()).thenAnswer(inv -> uidSeq.getAndAdd(100));
@@ -269,90 +233,5 @@ class DocumentManageServiceImplTest {
         Document first = documentMapper.selectById(500L);
         assertThat(first).isNotNull();
         assertThat(first.getOriginalFileName()).isEqualTo("first.pdf");
-    }
-
-    // =========================================================================
-    // DDL — 表名匹配实体 @TableName (reuben_agent_ 前缀)
-    // =========================================================================
-    private void createDocumentTable() {
-        jdbcTemplate.execute("""
-            CREATE TABLE reuben_agent_document (
-                id              BIGINT        NOT NULL PRIMARY KEY,
-                document_name   VARCHAR(512)  DEFAULT NULL,
-                original_file_name VARCHAR(512) DEFAULT NULL,
-                file_type       TINYINT       DEFAULT NULL,
-                media_type      VARCHAR(128)  DEFAULT NULL,
-                file_size       BIGINT        DEFAULT NULL,
-                storage_type    TINYINT       DEFAULT NULL,
-                bucket_name     VARCHAR(128)  DEFAULT NULL,
-                object_name     VARCHAR(512)  DEFAULT NULL,
-                object_url      VARCHAR(1024) DEFAULT NULL,
-                parse_status    TINYINT       DEFAULT 1,
-                strategy_status TINYINT       DEFAULT 1,
-                index_status    TINYINT       DEFAULT 1,
-                char_count      INT           DEFAULT NULL,
-                token_count     INT           DEFAULT NULL,
-                structure_level TINYINT       DEFAULT 0,
-                content_quality_level TINYINT DEFAULT 0,
-                parse_success_text_path VARCHAR(512) DEFAULT NULL,
-                parse_error_msg VARCHAR(1024) DEFAULT NULL,
-                knowledge_scope_code VARCHAR(128) DEFAULT NULL,
-                knowledge_scope_name VARCHAR(256) DEFAULT NULL,
-                business_category VARCHAR(256) DEFAULT NULL,
-                document_tags   VARCHAR(1024) DEFAULT NULL,
-                current_strategy_plan_id BIGINT DEFAULT NULL,
-                latest_parse_task_id BIGINT DEFAULT NULL,
-                structure_node_count INT DEFAULT NULL,
-                latest_index_task_id BIGINT DEFAULT NULL,
-                create_time     DATETIME      DEFAULT NULL,
-                update_time     DATETIME      DEFAULT NULL,
-                is_deleted      TINYINT       DEFAULT 0
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """);
-    }
-
-    private void createDocumentTaskTable() {
-        jdbcTemplate.execute("""
-            CREATE TABLE reuben_agent_document_task (
-                id              BIGINT        NOT NULL PRIMARY KEY,
-                document_id     BIGINT        NOT NULL,
-                strategy_plan_id BIGINT       DEFAULT NULL,
-                task_type       TINYINT       DEFAULT NULL,
-                task_status     TINYINT       DEFAULT 1,
-                current_stage   TINYINT       DEFAULT NULL,
-                trigger_source  TINYINT       DEFAULT 1,
-                strategy_snapshot VARCHAR(256) DEFAULT NULL,
-                retry_count     INT           DEFAULT 0,
-                start_time      DATETIME      DEFAULT NULL,
-                finish_time     DATETIME      DEFAULT NULL,
-                cost_millis     BIGINT        DEFAULT NULL,
-                error_code      VARCHAR(64)   DEFAULT NULL,
-                error_msg       VARCHAR(1024) DEFAULT NULL,
-                ext_json        TEXT          DEFAULT NULL,
-                create_time     DATETIME      DEFAULT NULL,
-                update_time     DATETIME      DEFAULT NULL,
-                is_deleted      TINYINT       DEFAULT 0
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """);
-    }
-
-    private void createDocumentTaskLogTable() {
-        jdbcTemplate.execute("""
-            CREATE TABLE reuben_agent_document_task_log (
-                id              BIGINT        NOT NULL PRIMARY KEY,
-                task_id         BIGINT        NOT NULL,
-                document_id     BIGINT        NOT NULL,
-                stage_type      TINYINT       DEFAULT NULL,
-                event_type      TINYINT       DEFAULT NULL,
-                log_level       TINYINT       DEFAULT 1,
-                operator_type   TINYINT       DEFAULT 1,
-                operator_id     BIGINT        DEFAULT NULL,
-                content         VARCHAR(2048) DEFAULT NULL,
-                detail_json     TEXT          DEFAULT NULL,
-                create_time     DATETIME      DEFAULT NULL,
-                update_time     DATETIME      DEFAULT NULL,
-                is_deleted      TINYINT       DEFAULT 0
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            """);
     }
 }

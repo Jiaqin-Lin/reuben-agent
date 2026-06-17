@@ -8,7 +8,6 @@ import com.reubenagent.framework.uid.worker.WorkerIdAssigner;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 
-import java.util.Date;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -77,8 +76,7 @@ public class DefaultUidGenerator implements UidGenerator, InitializingBean {
         }
 
         // 3. 计算 epoch 秒数
-        this.epochSeconds = TimeUnit.MILLISECONDS.toSeconds(
-                AbstractDateUtils.parseByDayPattern(epochStr).getTime());
+        this.epochSeconds = AbstractDateUtils.parseEpochSeconds(epochStr);
 
         log.info("DefaultUidGenerator 初始化完成 — bits(1, {}, {}, {}), workerId={}",
                 timeBits, workerBits, seqBits, workerId);
@@ -110,8 +108,7 @@ public class DefaultUidGenerator implements UidGenerator, InitializingBean {
         long workerId = (uid << (timestampBits + signBits)) >>> (totalBits - workerIdBits);
         long deltaSeconds = uid >>> (workerIdBits + sequenceBits);
 
-        Date thatTime = new Date(TimeUnit.SECONDS.toMillis(epochSeconds + deltaSeconds));
-        String thatTimeStr = AbstractDateUtils.formatByDateTimePattern(thatTime);
+        String thatTimeStr = AbstractDateUtils.formatTimestamp(epochSeconds + deltaSeconds);
 
         return String.format(
                 "{\"UID\":\"%d\",\"timestamp\":\"%s\",\"workerId\":\"%d\",\"sequence\":\"%d\"}",
@@ -153,10 +150,27 @@ public class DefaultUidGenerator implements UidGenerator, InitializingBean {
 
     // ============ 时间工具 ============
 
-    /** 等待直到下一秒钟 */
+    /**
+     * 等待直到下一秒钟。
+     *
+     * <p>自旋等待 + 短暂睡眠，避免空转耗尽 CPU。</p>
+     */
     private long getNextSecond(long lastTimestamp) {
         long timestamp = getCurrentSecond();
+        // 自旋几次（微秒级），等不到就 sleep 1ms 让出 CPU
+        int spins = 0;
         while (timestamp <= lastTimestamp) {
+            if (++spins > 100) {
+                try {
+                    Thread.sleep(1);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new UidGenerateException("等待下一秒时被中断");
+                }
+                spins = 0;
+            } else {
+                Thread.onSpinWait();
+            }
             timestamp = getCurrentSecond();
         }
         return timestamp;

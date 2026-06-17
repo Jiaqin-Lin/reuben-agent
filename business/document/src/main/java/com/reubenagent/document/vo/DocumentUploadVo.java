@@ -1,30 +1,39 @@
 package com.reubenagent.document.vo;
 
+import com.reubenagent.document.enums.DocumentIndexStatusEnum;
+import com.reubenagent.document.enums.DocumentParseStatusEnum;
+import com.reubenagent.document.enums.DocumentStrategyStatusEnum;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+/**
+ * 文档上传响应体。状态字段取值参见 {@link DocumentParseStatusEnum}、{@link DocumentStrategyStatusEnum}、{@link DocumentIndexStatusEnum}。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 public class DocumentUploadVo {
 
-    /** 文档ID */
+    /** 文档 ID（UidGenerator 生成的全局唯一 ID） */
     private Long documentId;
 
-    /** 任务ID */
+    /** 关联的任务 ID */
     private Long taskId;
 
     /** 文档名称 */
     private String documentName;
 
-    /** 解析状态 1=待解析, 2=解析中, 3=解析成功, 4=解析失败 */
+    /** 解析状态，取值见 {@link DocumentParseStatusEnum} */
     private Integer parseStatus;
 
-    /** 策略状态 1=待推荐, 2=已推荐, 3=已确认, 4=已失效 */
+    /** 策略状态，取值见 {@link DocumentStrategyStatusEnum} */
     private Integer strategyStatus;
 
-    /** 索引状态 1=待构建, 2=构建中, 3=构建成功, 4=构建失败 */
+    /** 索引状态，取值见 {@link DocumentIndexStatusEnum} */
     private Integer indexStatus;
 
 }

@@ -7,7 +7,8 @@ import com.reubenagent.common.enums.BaseCode;
  *
  * <h3>设计原则</h3>
  * <ol>
- *   <li><b>code 必存</b> —— 每个构造器都确保 code 进入 {@code final} 字段。</li>
+ *   <li><b>code 必存</b> —— 接受 {@link BaseCode} 或 {@code Integer} 的构造器确保 code 进入 {@code final} 字段；
+ *       纯字符串构造器（无 code 的通用异常）会将 code 设为 {@code null}。</li>
  *   <li><b>不 shadow message</b> —— 完全依赖 {@link RuntimeException#getMessage()}，子类不重复声明。</li>
  *   <li><b>枚举优先</b> —— 接受 {@link BaseCode} 等枚举，保留语义上下文。</li>
  *   <li><b>cause 链完整</b> —— 每个构造器都可传入根因。</li>

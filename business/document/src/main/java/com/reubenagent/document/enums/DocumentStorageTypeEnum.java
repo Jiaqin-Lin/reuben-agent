@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 文档存储类型枚举 —— 文件存储后端标识。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentStorageTypeEnum {
     MINIO(1, "minio");
 

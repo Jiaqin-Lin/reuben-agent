@@ -5,4 +5,6 @@ import com.reubenagent.document.model.StoredObjectInfo;
 public interface IDocumentStorageService {
 
     StoredObjectInfo uploadOriginalFile(Long documentId, String originalFileName, byte[] fileBytes, String contentType);
+
+    byte[] downloadObject(String objectName);
 }

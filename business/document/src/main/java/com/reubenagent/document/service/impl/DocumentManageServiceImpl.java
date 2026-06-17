@@ -40,8 +40,21 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
     private final IDocumentTaskMapper documentTaskMapper;
     private final IDocumentTaskLogMapper documentTaskLogMapper;
 
+    /**
+     * 上传文档并创建解析任务。
+     *
+     * <p>流程：校验文件 → 生成 ID → 上传 MinIO → 在事务中写入 Document/Task/TaskLog 三表。</p>
+     *
+     * @param file               上传的文件
+     * @param documentUploadDto  上传元数据（可为 null，此时使用默认值）
+     * @return 上传结果 VO，含 documentId、taskId 和初始状态
+     */
     @Override
     public DocumentUploadVo upload(MultipartFile file, DocumentUploadDto documentUploadDto) {
+        // 防御性编程：调用方（Controller）已保证非 null，但保留守卫以防其他调用方
+        if (documentUploadDto == null) {
+            documentUploadDto = new DocumentUploadDto();
+        }
         if (file == null || file.isEmpty()) {
             throw new DocumentException(DocumentManageCode.EMPTY_FILE);
         }
@@ -118,7 +131,14 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
         return documentUploadVo;
     }
 
-    private byte[] getFileBytes (MultipartFile file){
+    /**
+     * 从 MultipartFile 安全读取字节数组。
+     *
+     * @param file 上传文件
+     * @return 文件字节数组
+     * @throws DocumentException 读取失败时抛出
+     */
+    private byte[] getFileBytes(MultipartFile file) {
         try {
             return file.getBytes();
         } catch (IOException e) {
@@ -126,6 +146,12 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
         }
     }
 
+    /**
+     * 将字符串解析为可选的 Long 型操作人 ID。
+     *
+     * @param value 字符串形式的 ID
+     * @return 解析后的正 Long 值，空白/无效/非正数时返回 null
+     */
     private Long parseOptionalLong(String value) {
         if (StringUtils.isBlank(value)) {
             return null;
@@ -138,10 +164,22 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
         }
     }
 
+    /**
+     * 根据操作人 ID 判断任务触发来源。
+     *
+     * @param operatorId 操作人 ID，null 时返回 SYSTEM
+     * @return 触发来源枚举 code
+     */
     private Integer resolveTriggerSource(Long operatorId) {
         return operatorId == null ? DocumentTriggerSourceEnum.SYSTEM.getCode() : DocumentTriggerSourceEnum.USER.getCode();
     }
 
+    /**
+     * 根据操作人 ID 判断操作者类型。
+     *
+     * @param operatorId 操作人 ID，null 时返回 SYSTEM
+     * @return 操作者类型枚举 code
+     */
     private Integer resolveOperatorType(Long operatorId) {
         return operatorId == null ? DocumentOperatorTypeEnum.SYSTEM.getCode() : DocumentOperatorTypeEnum.USER.getCode();
     }

@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 任务阶段枚举 —— 从文件上传到入库完成的 8 步流水线阶段。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentTaskStageEnum {
     FILE_UPLOAD(1, "文件上传"),
     CONTENT_PARSE(2, "内容解析"),

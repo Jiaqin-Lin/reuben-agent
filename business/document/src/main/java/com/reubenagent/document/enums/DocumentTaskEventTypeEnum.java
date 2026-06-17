@@ -2,6 +2,12 @@ package com.reubenagent.document.enums;
 
 import lombok.Getter;
 
+/**
+ * 任务事件类型枚举 —— 记录任务生命周期中的关键事件，用于 {@link DocumentTaskLog}。
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 public enum DocumentTaskEventTypeEnum {
     START(1, "开始"),
     COMPLETE(2, "完成"),
