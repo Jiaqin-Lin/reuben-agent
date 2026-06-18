@@ -24,9 +24,15 @@ spring:
       - org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
 
   # 避免 Spring AI 因为缺 api-key 而启动失败
+  # 如需真实 LLM 调用，改为真实 key 或参考 .env 文件
   ai:
-    openai:
+    deepseek:
       api-key: fake-test-key
+      # base-url: https://api.deepseek.com  # 默认已是 DeepSeek，无需配置
+      # chat:
+      #   options:
+      #     model: deepseek-v4-flash        # 默认已是 v4-flash
+      #     temperature: 0.2
 
 mybatis-plus:
   configuration:

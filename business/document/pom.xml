@@ -43,10 +43,10 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
-        <!-- Spring AI (embeddings) -->
+        <!-- Spring AI DeepSeek (chat + embeddings) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-starter-model-openai</artifactId>
+            <artifactId>spring-ai-starter-model-deepseek</artifactId>
         </dependency>
 
         <!-- Kafka -->

@@ -15,7 +15,15 @@ import java.util.List;
 /**
  * 文档结构节点提取器 —— 将信号列表归并为结构节点树（Signal → StructureNode）。
  *
- * <p>当前为 stub：归并逻辑待实现。空文本时返回仅含 ROOT 节点的兜底列表。</p>
+ * <p>四阶段管线（与 super-agent 对齐）：</p>
+ * <ol>
+ *   <li><b>Stage 1</b> — {@link DocumentStructureNodeSignalExtractor}：规则引擎逐行分类 ✅</li>
+ *   <li><b>Stage 2</b> — {@link DocumentStructureNodeAmbiguityResolver}：LLM 二次判定模糊信号 ✅</li>
+ *   <li><b>Stage 3</b> — hierarchyResolver：信号 → 结构树（TODO）</li>
+ *   <li><b>Stage 4</b> — treeValidator：校验修复（TODO）</li>
+ * </ol>
+ *
+ * <p>空文本时返回仅含 ROOT 节点的兜底列表。</p>
  *
  * @author reuben
  * @since 2026-06-14
@@ -26,6 +34,7 @@ import java.util.List;
 public class DocumentStructureNodeExtractor {
 
     private final DocumentStructureNodeSignalExtractor documentStructureNodeSignalExtractor;
+    private final DocumentStructureNodeAmbiguityResolver ambiguityResolver;
 
     /**
      * 从文档纯文本中提取结构节点列表。
@@ -59,17 +68,24 @@ public class DocumentStructureNodeExtractor {
             ));
         }
 
+        // Stage 1: 规则引擎信号提取
         DocumentStructureNodeSignalBatch signalBatch =
                 documentStructureNodeSignalExtractor.extract(documentTitle, parsedText);
 
-        // TODO: 实现 Signal → StructureNode 的归并逻辑
-        // 1. 遍历 signals，按 HEADING 信号确定层级和父子关系
+        // Stage 2: LLM 歧义消解（HEADING_CANDIDATE → HEADING / LIST_ITEM / BODY）
+        List<DocumentStructureNodeSignal> resolvedSignals = ambiguityResolver.resolve(
+                normalizedTitle,
+                signalBatch.contextLines(),
+                signalBatch.signals());
+
+        // TODO Stage 3/4: hierarchyResolver + treeValidator（后续实现）
+        // 1. 遍历 resolvedSignals，按 HEADING 信号确定层级和父子关系
         // 2. 标题间的 BODY/STEP_ITEM/LIST_ITEM 归入对应叶子节点 contentText
         // 3. 计算各节点的 nodeCode / canonicalPath / sectionPath
         // 4. 构建双向链表（prevSiblingNodeNo / nextSiblingNodeNo）
 
-        log.debug("信号提取完成，共 {} 条信号（含虚拟标题），待实现结构节点归并",
-                signalBatch.signals().size());
+        log.debug("Stage 1+2 完成: 共 {} 条信号（含虚拟标题），待实现结构节点归并",
+                resolvedSignals.size());
         return new ArrayList<>();
     }
 }

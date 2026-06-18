@@ -17,7 +17,9 @@ public class DocumentProperties {
 
     private Minio minio = new Minio();
 
-    // ============ 内部类 — 按中间件拆分 ============
+    private StructureParsing structureParsing = new StructureParsing();
+
+    // ============ 内部类 — 按中间件/功能拆分 ============
 
     @Data
     public static class Minio {
@@ -33,5 +35,24 @@ public class DocumentProperties {
         private String objectPrefix = "rag/document";
         /** 解析后纯文本的存储路径（TODO: 尚未被代码引用，待接入异步解析管线） */
         private String parseSuccessTextPath = "rag/parsed-text";
+    }
+
+    /**
+     * 文档结构解析配置，绑定 {@code reuben.document.structure-parsing}。
+     *
+     * <p>控制 LLM 歧义消解（Stage 2）的行为参数。</p>
+     */
+    @Data
+    public static class StructureParsing {
+        /** LLM 歧义消解总开关，关闭时跳过 Stage 2 */
+        private Boolean llmDisambiguationEnabled = true;
+        /** 单次 LLM 调用最多处理的模糊信号数 */
+        private Integer maxAmbiguousSignalsPerCall = 8;
+        /** 每个模糊行前后各取多少行作为 LLM 上下文 */
+        private Integer contextWindowLines = 4;
+        /** 模糊信号置信度下限（低于此值不送 LLM，直接保留规则引擎分类） */
+        private Double ambiguityConfidenceFloor = 0.45;
+        /** 模糊信号置信度上限（高于此值不送 LLM，直接保留规则引擎分类） */
+        private Double ambiguityConfidenceCeil = 0.80;
     }
 }

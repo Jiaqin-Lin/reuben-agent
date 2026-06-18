@@ -48,4 +48,9 @@ build/
 CLAUDE.md
 AGENTS.md
 
+### Env & secrets ###
+.env
+*.env
+.env.*
+
 /document
