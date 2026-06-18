@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentTaskTypeEnum {
+public enum DocumentTaskTypeEnum implements BaseEnum {
     PARSE_ROUTE(1, "解析路由"),
     BUILD_INDEX(2, "构建索引");
 
@@ -26,12 +28,6 @@ public enum DocumentTaskTypeEnum {
     }
 
     public static DocumentTaskTypeEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentTaskTypeEnum item : DocumentTaskTypeEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentTaskTypeEnum.class, code);
     }
 }

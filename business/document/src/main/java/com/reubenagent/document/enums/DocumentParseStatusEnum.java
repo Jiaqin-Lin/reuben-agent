@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentParseStatusEnum {
+public enum DocumentParseStatusEnum implements BaseEnum {
     WAIT_TO_PARSE(1, "待解析"),
     PARSING(2, "解析中"),
     PARSE_SUCCESS(3, "解析成功"),
@@ -29,12 +31,6 @@ public enum DocumentParseStatusEnum {
     }
 
     public static DocumentParseStatusEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentParseStatusEnum item : DocumentParseStatusEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentParseStatusEnum.class, code);
     }
 }

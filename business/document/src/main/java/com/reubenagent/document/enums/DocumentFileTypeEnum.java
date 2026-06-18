@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentFileTypeEnum {
+public enum DocumentFileTypeEnum implements BaseEnum {
     PDF(1, "PDF"),
     DOC(2, "DOC"),
     DOCX(3, "DOCX"),
@@ -31,13 +33,7 @@ public enum DocumentFileTypeEnum {
     }
 
     public static DocumentFileTypeEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentFileTypeEnum item : DocumentFileTypeEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentFileTypeEnum.class, code);
     }
 
     public static DocumentFileTypeEnum getEnumFromFileName(String fileName) {

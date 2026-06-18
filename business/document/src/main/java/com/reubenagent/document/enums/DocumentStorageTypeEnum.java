@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentStorageTypeEnum {
+public enum DocumentStorageTypeEnum implements BaseEnum {
     MINIO(1, "minio");
 
     @Getter
@@ -25,12 +27,6 @@ public enum DocumentStorageTypeEnum {
     }
 
     public static DocumentStorageTypeEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentStorageTypeEnum item : DocumentStorageTypeEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentStorageTypeEnum.class, code);
     }
 }

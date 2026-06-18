@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentStrategyStatusEnum {
+public enum DocumentStrategyStatusEnum implements BaseEnum {
     WAIT_TO_RECOMMEND(1, "待推荐"),
     RECOMMENDED(2, "已推荐"),
     CONFIRMED(3, "已确认"),
@@ -28,12 +30,6 @@ public enum DocumentStrategyStatusEnum {
     }
 
     public static DocumentStrategyStatusEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentStrategyStatusEnum item : DocumentStrategyStatusEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentStrategyStatusEnum.class, code);
     }
 }

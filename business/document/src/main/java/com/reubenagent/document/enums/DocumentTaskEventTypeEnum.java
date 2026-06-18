@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentTaskEventTypeEnum {
+public enum DocumentTaskEventTypeEnum implements BaseEnum {
     START(1, "开始"),
     COMPLETE(2, "完成"),
     FAILED(3, "失败"),
@@ -30,12 +32,6 @@ public enum DocumentTaskEventTypeEnum {
     }
 
     public static DocumentTaskEventTypeEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentTaskEventTypeEnum item : DocumentTaskEventTypeEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentTaskEventTypeEnum.class, code);
     }
 }

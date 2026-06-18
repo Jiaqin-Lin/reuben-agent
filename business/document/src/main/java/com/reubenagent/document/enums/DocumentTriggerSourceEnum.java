@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentTriggerSourceEnum {
+public enum DocumentTriggerSourceEnum implements BaseEnum {
     SYSTEM(1, "系统自动"),
     USER(2, "用户手动"),
     ;
@@ -27,12 +29,6 @@ public enum DocumentTriggerSourceEnum {
     }
 
     public static DocumentTriggerSourceEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentTriggerSourceEnum item : DocumentTriggerSourceEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentTriggerSourceEnum.class, code);
     }
 }

@@ -45,7 +45,7 @@
 
         <!-- Utilities -->
         <hutool.version>5.8.25</hutool.version>
-        <lombok.version>1.18.20</lombok.version>
+        <lombok.version>1.18.36</lombok.version>
         <fastjson.version>1.2.83</fastjson.version>
         <jjwt.version>0.9.1</jjwt.version>
         <commons-lang.version>2.6</commons-lang.version>
@@ -55,7 +55,7 @@
         <knife4j.version>4.3.0</knife4j.version>
 
         <!-- Plugins -->
-        <maven-compiler.version>3.8.1</maven-compiler.version>
+        <maven-compiler.version>3.13.0</maven-compiler.version>
         <maven-resources.version>3.2.0</maven-resources.version>
         <maven-source.version>3.2.1</maven-source.version>
         <flatten-maven.version>1.4.1</flatten-maven.version>

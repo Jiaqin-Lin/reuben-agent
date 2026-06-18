@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentTaskStatusEnum {
+public enum DocumentTaskStatusEnum implements BaseEnum {
     NEW(1, "新建"),
     RUNNING(2, "进行中"),
     SUCCESS(3, "成功"),
@@ -29,12 +31,6 @@ public enum DocumentTaskStatusEnum {
     }
 
     public static DocumentTaskStatusEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentTaskStatusEnum item : DocumentTaskStatusEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentTaskStatusEnum.class, code);
     }
 }

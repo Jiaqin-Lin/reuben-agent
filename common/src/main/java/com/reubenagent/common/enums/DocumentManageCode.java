@@ -11,7 +11,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentManageCode {
+public enum DocumentManageCode implements BaseEnum {
 
     EMPTY_FILE(20001, "文件内容为空"),
     EMPTY_ORIGINAL_FILE_NAME(20002, "原始文件名为空"),
@@ -30,7 +30,12 @@ public enum DocumentManageCode {
         this.msg = msg;
     }
 
+    @Override
     public String getMsg() {
         return msg;
+    }
+
+    public static DocumentManageCode getFromCode(Integer code) {
+        return EnumUtils.getFromCode(DocumentManageCode.class, code);
     }
 }

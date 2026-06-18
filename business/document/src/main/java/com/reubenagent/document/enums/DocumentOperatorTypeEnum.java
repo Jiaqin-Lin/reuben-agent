@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentOperatorTypeEnum {
+public enum DocumentOperatorTypeEnum implements BaseEnum {
     SYSTEM(1, "系统"),
     USER(2, "用户"),
     ADMIN(3, "管理员")
@@ -28,12 +30,6 @@ public enum DocumentOperatorTypeEnum {
     }
 
     public static DocumentOperatorTypeEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentOperatorTypeEnum item : DocumentOperatorTypeEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentOperatorTypeEnum.class, code);
     }
 }

@@ -39,7 +39,7 @@ public class DocumentStructureNodeSignalExtractor {
      *   <li><b>右括号序号</b>：{@code 1)}、{@code a)}</li>
      *   <li><b>中文序号</b>：{@code 一、}、{@code 二十三.}（前面不能是汉字）</li>
      *   <li><b>数字序号</b>：{@code 1.}、{@code 12、}（前面不能是数字或点）</li>
-     *   <li><b>字母/罗马序号</b>：{@code A)}、{@code ii.}（前面不能是字母）</li>
+     *   <li><b>字母/罗马序号</b>：{@code A)}、{@code ii.}（前面不能是字母，不含 {@code 、}）</li>
      * </ul>
      *
      * <h4>前置禁止（negative lookbehind）</h4>
@@ -63,17 +63,17 @@ public class DocumentStructureNodeSignalExtractor {
                     // ── 半角括号：(1) (a) ──
                     "\\(\\s*(?:[0-9]+|[零一二三四五六七八九十百千万两]+|[a-zA-Z])\\s*\\)" +
                     "|" +
-                    // ── 右括号序号：1) a) ──
-                    "(?:[0-9]+|[零一二三四五六七八九十百千万两]+|[a-zA-Z]+)\\s*\\)" +
+                    // ── 右括号序号：1) a) （前面不能是左括号，防止 (2) 被切分为 ( + 2)）──
+                    "(?<!\\()(?:[0-9]+|[零一二三四五六七八九十百千万两]+|[a-zA-Z]+)\\s*\\)" +
                     "|" +
                     // ── 中文序号：一、 二十三. （前面不能是汉字） ──
                     "(?<![一-鿿])[零一二三四五六七八九十百千万两]+\\s*[、.]" +
                     "|" +
-                    // ── 数字序号：1. 12、 （前面不能是数字或点） ──
-                    "(?<![\\d.])[0-9]+\\s*[、.]" +
+                    // ── 数字序号：1. 12、 （前面不能是数字、点或版本号前缀 V/v） ──
+                    "(?<![\\d.Vv])[0-9]+\\s*[、.]" +
                     "|" +
-                    // ── 字母/罗马序号：A) ii. （前面不能是字母） ──
-                    "(?<![a-zA-Z])[a-zA-Z]+\\s*[、.)]" +
+                    // ── 字母/罗马序号：A) ii. （前面不能是字母；不含 、—字母+顿号不是合法序号标记） ──
+                    "(?<![a-zA-Z])[a-zA-Z]+\\s*[.)]" +
                     ")"
     );
 
@@ -105,6 +105,13 @@ public class DocumentStructureNodeSignalExtractor {
     private static final Pattern DECIMAL_HEADING_PATTERN = Pattern.compile("^(\\d+(?:\\.\\d+)+)\\s*[、.]?\\s*(.+)$");
 
     /**
+     * 单数字空格标题：匹配 {@code 1 系统架构设计}、{@code 12 附录说明}。
+     * <p>数字后跟空格（而非 {@code 、} 或 {@code .}），需要通过上下文确认不是正文。</p>
+     * <p>group(1) = 数字，group(2) = 标题文本</p>
+     */
+    private static final Pattern SINGLE_NUMBER_SPACE_HEADING_PATTERN = Pattern.compile("^(\\d{1,2})\\s+(.+)$");
+
+    /**
      * 中文章节标题：匹配 {@code 第一章 概述}、{@code 第3条 说明}、{@code 第二部分 详情}。
      * <p>字符类 {@code [章节条部分]} 覆盖常见中文结构标记。group(1) = 完整编码（如 "第一章"），
      * group(2) = 数字部分（用于解析序号），group(3) = 标题文本</p>
@@ -118,11 +125,14 @@ public class DocumentStructureNodeSignalExtractor {
     private static final Pattern APPENDIX_PATTERN = Pattern.compile("^(附录\\s*([A-Za-z一二三四五六七八九十百\\d]+))(?:\\s+(.+))?$");
 
     /**
-     * 显式步骤标记：匹配 {@code 第1步 操作}、{@code 步骤三：说明}。
-     * <p>group(1) = "第N步" 中的 N，group(2) = "步骤N" 中的 N，group(3) = 步骤内容</p>
+     * 显式步骤标记：匹配 {@code 第1步 操作}、{@code 步骤三：说明}、{@code Step 2 Start}。
+     * <p>group(1) = "第N步" 中的 N，group(2) = "步骤N" 中的 N，group(3) = "Step N" 中的 N，group(4) = 步骤内容</p>
      */
     private static final Pattern EXPLICIT_STEP_PATTERN = Pattern.compile(
-            "^(?:第\\s*([0-9一二三四五六七八九十百]+)\\s*步|步骤\\s*([0-9一二三四五六七八九十百]+))\\s*[:：、.]?\\s*(.+)$");
+            "^(?:第\\s*([0-9一二三四五六七八九十百]+)\\s*步" +
+            "|步骤\\s*([0-9一二三四五六七八九十百]+)" +
+            "|[Ss][Tt][Ee][Pp]\\s+([0-9]+))" +
+            "\\s*[:：、.]?\\s*(.+)$");
 
     /**
      * 单级数字编号：匹配 {@code 1. 标题}、{@code 12、内容}。
@@ -150,6 +160,21 @@ public class DocumentStructureNodeSignalExtractor {
 
     /** 表格分隔符：用于统计管道符数量判断是否为表格行 */
     private static final Pattern TABLE_SPLIT_PATTERN = Pattern.compile("\\|");
+
+    /** Markdown 链接中包含管道符 — 排除表格误判 */
+    private static final Pattern MARKDOWN_LINK_WITH_PIPE = Pattern.compile(".*\\[.*\\]\\(.*\\|.*\\).*");
+
+    /** 表格纯分隔线（: - 空格 |） */
+    private static final Pattern TABLE_SEPARATOR_LINE = Pattern.compile("^[:\\-\\s|]+$");
+
+    /** 半角括号编号：(1) 启动服务、(a) 配置项 */
+    private static final Pattern PAREN_NUMBER_PATTERN = Pattern.compile("^\\(\\s*([0-9]+|[a-zA-Z])\\s*\\)\\s*(.+)$");
+
+    /** 右括号编号：1) 启动服务、a) 配置项 */
+    private static final Pattern RIGHT_PAREN_NUMBER_PATTERN = Pattern.compile("^([0-9]+|[a-zA-Z])\\s*\\)\\s*(.+)$");
+
+    /** 朴素标题排除 —— 纯分隔线（=== 或 ---） */
+    private static final Pattern PLAIN_HEADING_RULE = Pattern.compile("^[\\-=_]{3,}$");
 
     // ============ 内部类型 ============
 
@@ -190,6 +215,7 @@ public class DocumentStructureNodeSignalExtractor {
     public DocumentStructureNodeSignalBatch extract(String documentTitle, String parsedText) {
         List<DocumentStructureNodeLogicalLine> logicalLines = buildLogicalLines(parsedText);
         Map<String, Integer> logicalLineFrequencyMap = countLogicalLineFrequency(logicalLines);
+        List<LogicalLineContext> contextList = buildLogicalLineContexts(logicalLines);
 
         List<DocumentStructureNodeSignal> signals = new ArrayList<>(logicalLines.size() + 1);
         // 第 0 条：虚拟的文档标题信号
@@ -208,7 +234,7 @@ public class DocumentStructureNodeSignalExtractor {
 
         for (int index = 0; index < logicalLines.size(); index++) {
             DocumentStructureNodeLogicalLine logicalLine = logicalLines.get(index);
-            LogicalLineContext logicalLineContext = buildLogicalLineContext(logicalLines, index);
+            LogicalLineContext logicalLineContext = contextList.get(index);
             signals.add(classifySignal(documentTitle, logicalLine, logicalLineContext, logicalLineFrequencyMap));
         }
 
@@ -262,6 +288,13 @@ public class DocumentStructureNodeSignalExtractor {
                     List.of("page-number-noise"), 0);
         }
 
+        // (3.5) 纯分隔线 / 格式化符号（--- === ___ 等，不含表格管道符）
+        if (!trimmedText.contains("|") && PLAIN_HEADING_RULE.matcher(trimmedText).matches()) {
+            return buildSignal(logicalLineNo, rawText, trimmedText,
+                    DocumentStructureNodeSignalEnum.NOISE, "", null, 0.99D,
+                    List.of("separator-line-noise"), 0);
+        }
+
         // (4) Markdown 标题
         Matcher markdownHeading = MARKDOWN_HEADING_PATTERN.matcher(trimmedText);
         if (markdownHeading.matches()) {
@@ -276,17 +309,19 @@ public class DocumentStructureNodeSignalExtractor {
                     DocumentStructureNodeSignalEnum.HEADING,
                     headingCode, title, markdownHeading.group(1).length(),
                     0.98D, List.of("markdown-heading"),
-                    extractNumericPath(headingCode), indent);
+                    extractNumericPath(headingCode), null, indent);
         }
 
         // (5) 显式步骤标记
         Matcher explicitStep = EXPLICIT_STEP_PATTERN.matcher(trimmedText);
         if (explicitStep.matches()) {
-            String rawOrdinal = explicitStep.group(1) != null ? explicitStep.group(1) : explicitStep.group(2);
+            String rawOrdinal = explicitStep.group(1) != null ? explicitStep.group(1)
+                    : explicitStep.group(2) != null ? explicitStep.group(2)
+                    : explicitStep.group(3);
             Integer sequenceNo = parseOrdinal(rawOrdinal);
             return buildSignal(logicalLineNo, rawText, trimmedText,
                     DocumentStructureNodeSignalEnum.STEP_ITEM,
-                    "", explicitStep.group(3).trim(), null, 0.96D,
+                    "", explicitStep.group(4).trim(), null, 0.96D,
                     List.of("explicit-step"), null, sequenceNo, indent);
         }
 
@@ -306,7 +341,7 @@ public class DocumentStructureNodeSignalExtractor {
             return buildSignal(logicalLineNo, rawText, trimmedText,
                     DocumentStructureNodeSignalEnum.HEADING,
                     code, title, 1, 0.96D,
-                    List.of("chapter-heading"), numericPath, indent);
+                    List.of("chapter-heading"), numericPath, null, indent);
         }
 
         // (7) 附录标题
@@ -317,7 +352,7 @@ public class DocumentStructureNodeSignalExtractor {
             return buildSignal(logicalLineNo, rawText, trimmedText,
                     DocumentStructureNodeSignalEnum.HEADING,
                     code, title, 1, 0.92D,
-                    List.of("appendix-heading"), indent);
+                    List.of("appendix-heading"), null, null, indent);
         }
 
         // (8) 数字多级编号
@@ -325,12 +360,35 @@ public class DocumentStructureNodeSignalExtractor {
         if (decimal.matches()) {
             String code = decimal.group(1).trim();
             String title = decimal.group(2).trim();
+            // 防御：句末标点结尾 → 正文句（如 "1.0.0 是一个正常的版本引用。"）
+            if (title.endsWith("。") || title.endsWith("！") || title.endsWith("？")) {
+                return buildSignal(logicalLineNo, rawText, trimmedText,
+                        DocumentStructureNodeSignalEnum.BODY,
+                        "", null, 1.0D, List.of("body"), indent);
+            }
             List<Integer> numericPath = extractNumericPath(code);
             int levelHint = Math.max(1, code.split("\\.").length);
             return buildSignal(logicalLineNo, rawText, trimmedText,
                     DocumentStructureNodeSignalEnum.HEADING,
                     code, title, levelHint, 0.95D,
-                    List.of("decimal-heading"), numericPath, indent);
+                    List.of("decimal-heading"), numericPath, null, indent);
+        }
+
+        // (8.5) 单数字空格标题 —— "1 系统架构设计"、"2 核心模块设计"
+        // 在 decimal-heading 之后、table-row 之前检测，避免表行/序号列表误匹配
+        Matcher singleNumSpace = SINGLE_NUMBER_SPACE_HEADING_PATTERN.matcher(trimmedText);
+        if (singleNumSpace.matches()) {
+            String num = singleNumSpace.group(1);
+            String title = singleNumSpace.group(2).trim();
+            // 必须满足标题上下文：孤立短行、不像列表项、不是正文句
+            if (looksLikePlainHeading(trimmedText, logicalLineContext)) {
+                int levelHint = inferPlainHeadingLevel(logicalLineContext);
+                return buildSignal(logicalLineNo, rawText, trimmedText,
+                        DocumentStructureNodeSignalEnum.HEADING,
+                        num, title, levelHint, 0.82D,
+                        List.of("single-number-space-heading"),
+                        List.of(Integer.parseInt(num)), null, indent);
+            }
         }
 
         // (9) 表格行
@@ -353,7 +411,27 @@ public class DocumentStructureNodeSignalExtractor {
             return buildSignal(logicalLineNo, rawText, trimmedText,
                     DocumentStructureNodeSignalEnum.LIST_ITEM,
                     "", checkbox.group(1).trim(), null, 0.92D,
-                    List.of("checkbox-list"), indent);
+                    List.of("checkbox-list"), null, null, indent);
+        }
+
+        // (11.5) 半角括号编号：(1) xxx、(a) xxx — 几乎不会是标题
+        Matcher parenNum = PAREN_NUMBER_PATTERN.matcher(trimmedText);
+        if (parenNum.matches()) {
+            Integer sequenceNo = parseOrdinal(parenNum.group(1));
+            return buildSignal(logicalLineNo, rawText, trimmedText,
+                    DocumentStructureNodeSignalEnum.LIST_ITEM,
+                    "", parenNum.group(2).trim(), null, 0.88D,
+                    List.of("paren-number-list"), null, sequenceNo, indent);
+        }
+
+        // (11.6) 右括号编号：1) xxx、a) xxx — 通常是列表项
+        Matcher rightParenNum = RIGHT_PAREN_NUMBER_PATTERN.matcher(trimmedText);
+        if (rightParenNum.matches()) {
+            Integer sequenceNo = parseOrdinal(rightParenNum.group(1));
+            return buildSignal(logicalLineNo, rawText, trimmedText,
+                    DocumentStructureNodeSignalEnum.LIST_ITEM,
+                    "", rightParenNum.group(2).trim(), null, 0.85D,
+                    List.of("right-paren-number-list"), null, sequenceNo, indent);
         }
 
         // (12) 无序列表
@@ -362,7 +440,7 @@ public class DocumentStructureNodeSignalExtractor {
             return buildSignal(logicalLineNo, rawText, trimmedText,
                     DocumentStructureNodeSignalEnum.LIST_ITEM,
                     "", bullet.group(2).trim(), null, 0.90D,
-                    List.of("bullet-list"), indent);
+                    List.of("bullet-list"), null, null, indent);
         }
 
         // (13) 数字单级编号 —— 模糊判断标题 vs 列表
@@ -387,7 +465,7 @@ public class DocumentStructureNodeSignalExtractor {
             return buildSignal(logicalLineNo, rawText, trimmedText,
                     DocumentStructureNodeSignalEnum.HEADING_CANDIDATE,
                     "", trimmedText, levelHint, 0.58D,
-                    List.of("plain-heading-candidate"), indent);
+                    List.of("plain-heading-candidate"), null, null, indent);
         }
 
         // (16) 以上全没命中 —— 普通正文
@@ -398,7 +476,7 @@ public class DocumentStructureNodeSignalExtractor {
 
     // ============ 构造器辅助 ============
 
-    /** 精简版：无 title / numericPath / sequenceNo */
+    /** 精简版：无 title / numericPath / sequenceNo，均传 null */
     private DocumentStructureNodeSignal buildSignal(int logicalLineNo, String rawText, String trimmedText,
                                                      DocumentStructureNodeSignalEnum kind,
                                                      String headingCode, Integer levelHint, double confidence,
@@ -406,23 +484,7 @@ public class DocumentStructureNodeSignalExtractor {
         return buildSignal(logicalLineNo, rawText, trimmedText, kind, headingCode, null, levelHint, confidence, reasons, null, null, indentLevel);
     }
 
-    /** 带 title，无 numericPath / sequenceNo */
-    private DocumentStructureNodeSignal buildSignal(int logicalLineNo, String rawText, String trimmedText,
-                                                     DocumentStructureNodeSignalEnum kind,
-                                                     String headingCode, String title, Integer levelHint, double confidence,
-                                                     List<String> reasons, int indentLevel) {
-        return buildSignal(logicalLineNo, rawText, trimmedText, kind, headingCode, title, levelHint, confidence, reasons, null, null, indentLevel);
-    }
-
-    /** 带 title + numericPath，无 sequenceNo */
-    private DocumentStructureNodeSignal buildSignal(int logicalLineNo, String rawText, String trimmedText,
-                                                     DocumentStructureNodeSignalEnum kind,
-                                                     String headingCode, String title, Integer levelHint, double confidence,
-                                                     List<String> reasons, List<Integer> numericPath, int indentLevel) {
-        return buildSignal(logicalLineNo, rawText, trimmedText, kind, headingCode, title, levelHint, confidence, reasons, numericPath, null, indentLevel);
-    }
-
-    /** 完整参数 */
+    /** 完整参数 —— 所有 call site 均可直接使用此方法 */
     private DocumentStructureNodeSignal buildSignal(int logicalLineNo, String rawText, String trimmedText,
                                                      DocumentStructureNodeSignalEnum kind,
                                                      String headingCode, String title, Integer levelHint, double confidence,
@@ -613,12 +675,12 @@ public class DocumentStructureNodeSignalExtractor {
         // 含有 | 且拆分 ≥ 3 段，但排除 Markdown 链接中的 | 干扰
         if (trimmedText.contains("|") && TABLE_SPLIT_PATTERN.split(trimmedText).length >= 3) {
             // 排除 "[text](url)" 模式 —— 链接中的 | 不应当判为表格
-            if (!trimmedText.matches(".*\\[.*\\]\\(.*\\|.*\\).*")) {
+            if (!MARKDOWN_LINK_WITH_PIPE.matcher(trimmedText).matches()) {
                 return true;
             }
         }
         // 纯分隔线
-        return trimmedText.matches("^[:\\-\\s|]+$");
+        return TABLE_SEPARATOR_LINE.matcher(trimmedText).matches();
     }
 
     // ============ 朴素标题启发式 ============
@@ -658,7 +720,16 @@ public class DocumentStructureNodeSignalExtractor {
         if (normalized.startsWith("|") || normalized.endsWith("|")) {
             return false;
         }
-        if (normalized.matches("^[\\-=_]{3,}$")) {
+        if (PLAIN_HEADING_RULE.matcher(normalized).matches()) {
+            return false;
+        }
+        // 至少包含一个字母、数字或 CJK 字符（排除纯符号行如 "("、")"）
+        if (!normalized.matches(".*[\\p{L}\\p{N}].*")) {
+            return false;
+        }
+        // Markdown 斜体/粗体包裹的元注释行（如 *文档结束*、_免责声明_）
+        if ((normalized.startsWith("*") && normalized.endsWith("*") && !normalized.startsWith("* "))
+                || (normalized.startsWith("_") && normalized.endsWith("_") && !normalized.startsWith("_ "))) {
             return false;
         }
 
@@ -763,8 +834,8 @@ public class DocumentStructureNodeSignalExtractor {
      *
      * <h4>判定规则</h4>
      * <ul>
+     *   <li>匹配版权/保密关键词 且 行短 ≤ 80 字符 → 版权噪声（即使只出现一次）</li>
      *   <li>出现 ≥ 2 次且匹配文档标题 → 标题重复噪声</li>
-     *   <li>匹配版权/保密关键词 → 版权噪声</li>
      *   <li>出现 ≥ 3 次、长度 ≤ 120 且 (匹配版本号模式 或 是表格行) → 重复页眉页脚噪声</li>
      * </ul>
      *
@@ -774,6 +845,10 @@ public class DocumentStructureNodeSignalExtractor {
      * @return true 如果是可丢弃的噪声行
      */
     private boolean isRepeatedNoiseOrFooter(String documentTitle, String trimmedText, int frequency) {
+        // 版权/保密声明 — 即使只出现一次也是噪声（限制短行，避免 "copyright law protects..." 类正文句误杀）
+        if (COPYRIGHT_PATTERN.matcher(trimmedText).matches() && trimmedText.length() <= 80) {
+            return true;
+        }
         if (frequency < 2) {
             return false;
         }
@@ -799,6 +874,13 @@ public class DocumentStructureNodeSignalExtractor {
 
     // ============ 标题去重 ============
 
+    /** 标准化标题 —— 去除 Markdown # 前导 */
+    private static final Pattern TITLE_NORMALIZE_MARKDOWN = Pattern.compile("^#+\\s*");
+    /** 标准化标题 —— 去除文件扩展名（防御性，调用方应已剥离） */
+    private static final Pattern TITLE_NORMALIZE_EXT = Pattern.compile("\\.[A-Za-z0-9]{1,6}$");
+    /** 标准化标题 —— 合并所有空白 */
+    private static final Pattern TITLE_NORMALIZE_SPACE = Pattern.compile("\\s+");
+
     /** 检测 trimmedText 是否是文档标题的重复出现。 */
     private boolean isSameDocumentTitle(String documentTitle, String trimmedText) {
         String left = normalizeComparableTitle(documentTitle);
@@ -810,42 +892,60 @@ public class DocumentStructureNodeSignalExtractor {
      * 标准化标题用于比对 —— 去 Markdown # 标记、去文件扩展名、去空格、转小写。
      */
     private String normalizeComparableTitle(String title) {
-        return title
-                .replaceAll("^#+\\s*", "")
-                .replaceAll("\\.[A-Za-z0-9]{1,6}$", "")
-                .replaceAll("\\s+", "")
+        return TITLE_NORMALIZE_SPACE
+                .matcher(TITLE_NORMALIZE_EXT
+                        .matcher(TITLE_NORMALIZE_MARKDOWN
+                                .matcher(title).replaceAll(""))
+                        .replaceAll(""))
+                .replaceAll("")
                 .toLowerCase(Locale.ROOT);
     }
 
     // ============ 逻辑行上下文构建 ============
 
     /**
-     * 为指定行构建前后文上下文 —— 扫描前向和后向，找到最近的非空行并记录是否跨空白。
+     * 为所有逻辑行批量预计算前后文上下文 —— O(n) 正向+反向两趟扫描。
+     *
+     * <p>替代原先每行独立 O(n) 扫描（总计 O(n²)）的实现。</p>
      */
-    private LogicalLineContext buildLogicalLineContext(List<DocumentStructureNodeLogicalLine> logicalLines, int currentIndex) {
-        DocumentStructureNodeLogicalLine preNotBlankLine = null;
-        boolean precededByBlank = false;
-        for (int index = currentIndex - 1; index >= 0; index--) {
-            DocumentStructureNodeLogicalLine logicalLine = logicalLines.get(index);
-            if (StringUtils.isBlank(logicalLine.trimmedText())) {
-                precededByBlank = true;
-                continue;
+    private List<LogicalLineContext> buildLogicalLineContexts(List<DocumentStructureNodeLogicalLine> logicalLines) {
+        int size = logicalLines.size();
+        // 正向扫描：前驱 + 是否跨空白
+        DocumentStructureNodeLogicalLine[] preNotBlank = new DocumentStructureNodeLogicalLine[size];
+        boolean[] precededByBlank = new boolean[size];
+        DocumentStructureNodeLogicalLine lastNonBlank = null;
+        boolean blankSince = false;
+        for (int i = 0; i < size; i++) {
+            preNotBlank[i] = lastNonBlank;
+            precededByBlank[i] = blankSince;
+            if (StringUtils.isBlank(logicalLines.get(i).trimmedText())) {
+                blankSince = true;
+            } else {
+                lastNonBlank = logicalLines.get(i);
+                blankSince = false;
             }
-            preNotBlankLine = logicalLine;
-            break;
         }
-        DocumentStructureNodeLogicalLine nextNotBlankLine = null;
-        boolean followedByBlank = false;
-        for (int index = currentIndex + 1; index < logicalLines.size(); index++) {
-            DocumentStructureNodeLogicalLine logicalLine = logicalLines.get(index);
-            if (StringUtils.isBlank(logicalLine.trimmedText())) {
-                followedByBlank = true;
-                continue;
+        // 反向扫描：后继 + 是否跨空白
+        DocumentStructureNodeLogicalLine[] nextNotBlank = new DocumentStructureNodeLogicalLine[size];
+        boolean[] followedByBlank = new boolean[size];
+        DocumentStructureNodeLogicalLine nextNonBlankLine = null;
+        boolean blankAhead = false;
+        for (int i = size - 1; i >= 0; i--) {
+            nextNotBlank[i] = nextNonBlankLine;
+            followedByBlank[i] = blankAhead;
+            if (StringUtils.isBlank(logicalLines.get(i).trimmedText())) {
+                blankAhead = true;
+            } else {
+                nextNonBlankLine = logicalLines.get(i);
+                blankAhead = false;
             }
-            nextNotBlankLine = logicalLine;
-            break;
         }
-        return new LogicalLineContext(preNotBlankLine, nextNotBlankLine, precededByBlank, followedByBlank);
+        // 组装
+        List<LogicalLineContext> contexts = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            contexts.add(new LogicalLineContext(preNotBlank[i], nextNotBlank[i], precededByBlank[i], followedByBlank[i]));
+        }
+        return contexts;
     }
 
     // ============ 逻辑行构建 ============
@@ -888,11 +988,12 @@ public class DocumentStructureNodeSignalExtractor {
             return List.of();
         }
         String trimmedRawLine = rawLine.trim();
-        // 标题/表格/引用/分隔线不拆分
+        // 标题/表格/引用/分隔线/Tab分隔数据不拆分
         if (trimmedRawLine.startsWith("#")
                 || trimmedRawLine.startsWith("|")
                 || trimmedRawLine.startsWith(">")
-                || trimmedRawLine.matches("^[:\\-\\s|]+$")) {
+                || trimmedRawLine.contains("\t")
+                || TABLE_SEPARATOR_LINE.matcher(trimmedRawLine).matches()) {
             return List.of(rawLine);
         }
 

@@ -10,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum BaseCode {
+public enum BaseCode implements BaseEnum {
 
     SUCCESS(0, "OK"),
 
@@ -33,7 +33,12 @@ public enum BaseCode {
         this.msg = msg;
     }
 
+    @Override
     public String getMsg() {
         return msg;
+    }
+
+    public static BaseCode getFromCode(Integer code) {
+        return EnumUtils.getFromCode(BaseCode.class, code);
     }
 }

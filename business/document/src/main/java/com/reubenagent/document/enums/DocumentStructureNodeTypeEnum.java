@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -10,7 +12,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentStructureNodeTypeEnum {
+public enum DocumentStructureNodeTypeEnum implements BaseEnum {
     /** 文档根节点，一个文档仅一个 */
     ROOT(1, "文档根节点"),
     /** 章节（标题）节点 */
@@ -30,7 +32,7 @@ public enum DocumentStructureNodeTypeEnum {
     }
 
     public String getMsg() {
-        return msg == null ? "" : msg;
+        return msg;
     }
 
     /**
@@ -40,14 +42,6 @@ public enum DocumentStructureNodeTypeEnum {
      * @return 匹配的枚举，未找到或 code 为 null 时返回 null
      */
     public static DocumentStructureNodeTypeEnum getFromCode(Integer code) {
-        if (code == null) {
-            return null;
-        }
-        for (DocumentStructureNodeTypeEnum item : values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentStructureNodeTypeEnum.class, code);
     }
 }

@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentTaskStageEnum {
+public enum DocumentTaskStageEnum implements BaseEnum {
     FILE_UPLOAD(1, "文件上传"),
     CONTENT_PARSE(2, "内容解析"),
     STRATEGY_ROUTE(3, "策略路由"),
@@ -32,12 +34,6 @@ public enum DocumentTaskStageEnum {
     }
 
     public static DocumentTaskStageEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentTaskStageEnum item : DocumentTaskStageEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentTaskStageEnum.class, code);
     }
 }

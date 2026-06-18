@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentLogLevelEnum {
+public enum DocumentLogLevelEnum implements BaseEnum {
     INFO(1, "INFO"),
     WARN(2, "WARN"),
     ERROR(3, "ERROR");
@@ -27,12 +29,6 @@ public enum DocumentLogLevelEnum {
     }
 
     public static DocumentLogLevelEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentLogLevelEnum item : DocumentLogLevelEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentLogLevelEnum.class, code);
     }
 }

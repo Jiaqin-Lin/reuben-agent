@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.common.enums.BaseEnum;
+import com.reubenagent.common.enums.EnumUtils;
 import lombok.Getter;
 
 /**
@@ -8,7 +10,7 @@ import lombok.Getter;
  * @author reuben
  * @since 2026-06-14
  */
-public enum DocumentIndexStatusEnum {
+public enum DocumentIndexStatusEnum implements BaseEnum {
     WAIT_TO_BUILD(1, "待构建"),
     BUILDING(2, "构建中"),
     BUILD_SUCCESS(3, "构建成功"),
@@ -28,12 +30,6 @@ public enum DocumentIndexStatusEnum {
     }
 
     public static DocumentIndexStatusEnum getFromCode(Integer code) {
-        if (code == null) { return null; }
-        for (DocumentIndexStatusEnum item : DocumentIndexStatusEnum.values()) {
-            if (item.code.intValue() == code.intValue()) {
-                return item;
-            }
-        }
-        return null;
+        return EnumUtils.getFromCode(DocumentIndexStatusEnum.class, code);
     }
 }
