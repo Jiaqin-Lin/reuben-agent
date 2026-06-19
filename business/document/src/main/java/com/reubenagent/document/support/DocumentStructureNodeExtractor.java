@@ -20,10 +20,10 @@ import java.util.List;
  *   <li><b>Stage 1</b> — {@link DocumentStructureNodeSignalExtractor}：规则引擎逐行分类 ✅</li>
  *   <li><b>Stage 2</b> — {@link DocumentStructureNodeAmbiguityResolver}：LLM 二次判定模糊信号 ✅</li>
  *   <li><b>Stage 3</b> — {@link DocumentStructureHierarchyResolver}：信号 → 结构树 ✅</li>
- *   <li><b>Stage 4</b> — treeValidator：校验修复（TODO）</li>
+ *   <li><b>Stage 4</b> — {@link DocumentStructureTreeValidator}：校验修复 ✅</li>
  * </ol>
  *
- * <p>当前 Stage 4 未实现，Stage 3 产物直接返回（缺少：siblingLinks 重建、canonicalPath/sectionPath 规范化、重复标题折叠）。</p>
+ * <p>四阶段完成后产出可直接用于切片策略和索引构建的最终结构树。</p>
  *
  * <p>空文本时返回仅含 ROOT 节点的兜底列表。</p>
  *
@@ -38,13 +38,14 @@ public class DocumentStructureNodeExtractor {
     private final DocumentStructureNodeSignalExtractor documentStructureNodeSignalExtractor;
     private final DocumentStructureNodeAmbiguityResolver ambiguityResolver;
     private final DocumentStructureHierarchyResolver hierarchyResolver;
+    private final DocumentStructureTreeValidator treeValidator;
 
     /**
      * 从文档纯文本中提取结构节点列表。
      *
      * @param documentTitle 文档标题
      * @param parsedText    Tika 提取后的纯文本内容
-     * @return 结构节点列表（空文本时返回 ROOT 兜底，正常文本返回 Stage 3 草稿）
+     * @return 结构节点列表（空文本时返回 ROOT 兜底，正常文本返回四阶段验证修复后的最终节点）
      */
     public List<DocumentIntermediateStructureNode> extract(String documentTitle, String parsedText) {
         String normalizedTitle = StringUtils.defaultIfBlank(documentTitle, "文档").trim();
@@ -84,12 +85,15 @@ public class DocumentStructureNodeExtractor {
                 signalBatch.signals());
 
         // Stage 3: 层级解析 → 信号列表归并为树形草稿
-        // （暂定 parentNodeNo 和 depth，canonicalPath/sectionPath/siblingLinks 待 Stage 4 规范化）
         List<DocumentIntermediateStructureNode> drafts =
                 hierarchyResolver.resolve(normalizedTitle, resolvedSignals);
 
-        log.debug("Stage 1-3 完成: {} 条信号 → {} 个节点",
-                resolvedSignals.size(), drafts.size());
-        return drafts;
+        // Stage 4: 树验证修复 → 重建兄弟链接、规范化路径、折叠重复标题
+        List<DocumentIntermediateStructureNode> validated =
+                treeValidator.validateAndBuild(normalizedTitle, drafts);
+
+        log.debug("Stage 1-4 完成: {} 条信号 → {} 个节点（验证修复后）",
+                resolvedSignals.size(), validated.size());
+        return validated;
     }
 }
