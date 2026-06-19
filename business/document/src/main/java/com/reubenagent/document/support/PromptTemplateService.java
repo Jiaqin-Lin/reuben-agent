@@ -45,8 +45,7 @@ public class PromptTemplateService {
      * @return 渲染后的文本
      */
     public String render(String templateName, Map<String, String> variables) {
-        String template = loadTemplate(templateName);
-        String result = template;
+        String result = loadTemplate(templateName);
         if (variables != null) {
             for (Map.Entry<String, String> entry : variables.entrySet()) {
                 String placeholder = "<" + entry.getKey() + ">";

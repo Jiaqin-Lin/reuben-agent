@@ -2,6 +2,7 @@ package com.reubenagent.document.enums;
 
 import com.reubenagent.common.enums.BaseEnum;
 import com.reubenagent.common.enums.EnumUtils;
+import com.reubenagent.document.entity.DocumentTaskLog;
 import lombok.Getter;
 
 /**

@@ -1,5 +1,7 @@
 package com.reubenagent.document.enums;
 
+import com.reubenagent.document.support.DocumentStructureNodeSignalExtractor;
+
 /**
  * 文档结构信号枚举 —— 逐行分类标签，是 {@link DocumentStructureNodeSignalExtractor} 的输出结果。
  *

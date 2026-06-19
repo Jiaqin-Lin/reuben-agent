@@ -1,50 +1,112 @@
 package com.reubenagent.document.model;
 
+import com.reubenagent.document.enums.DocumentStructureNodeTypeEnum;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.apache.commons.lang3.StringUtils;
 
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * 文档树节点 — Stage 3 草稿载体 &amp; 管线最终输出。
+ *
+ * <p>在 {@code DocumentStructureHierarchyResolver} 中作为可变草稿使用（通过
+ * {@link #appendLine(String)} 累积正文、setter 调整层级），Stage 4 验证后直接返回，
+ * 无需转换。</p>
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 @Data
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class DocumentIntermediateStructureNode {
 
-    /** 节点编号（从1开始递增，同一篇文档内唯一），持久化时映射为 DB 主键 ID */
+    /** 唯一节点编号（从1递增） */
     private Integer nodeNo;
 
-    /** 节点类型：1=文档根节点(ROOT), 2=章节节点(CHAPTER), 3=步骤节点(STEP), 4=列表项(LIST_ITEM) */
+    /** 源行号（对应 {@link DocumentStructureNodeSignal#getLogicalLineNo()}），根节点为 null */
+    private Integer logicalLineNo;
+
+    /** 节点类型：1=ROOT 2=CHAPTER 3=STEP 4=LIST_ITEM */
     private Integer nodeType;
 
-    /** 父节点的 nodeNo（根节点此值为 null），持久化时映射为 parentNodeId */
+    /** 父节点编号（根为 null） */
     private Integer parentNodeNo;
 
-    /** 前一个兄弟节点的 nodeNo（同级第一个为 null），与 nextSiblingNodeNo 组成双向链表，持久化时映射为 prevSiblingNodeId */
+    /** 前兄弟编号（同级首项为 null） */
     private Integer prevSiblingNodeNo;
 
-    /** 后一个兄弟节点的 nodeNo（同级最后一个为 null），持久化时映射为 nextSiblingNodeId */
+    /** 后兄弟编号（同级末项为 null） */
     private Integer nextSiblingNodeNo;
 
-    /** 节点在文档树中的深度（根节点 depth=0，每嵌套一层 +1） */
+    /** 树深度（根=0） */
     private Integer depth;
 
-    /** 节点编码（标准化格式），如 "H1"、"H2_3"（第3个二级标题）、"P_1_5"（第1章第5段）。与 Signal 层的原始编码（如 "1.2.3"）不同，此处已规范化为统一前缀格式 */
+    /** 节点编码（如 "1.2.3"、"第一章"），列表项可能为空 */
     private String nodeCode;
 
-    /** 节点标题文本（章节标题节点才有值，叶子节点和根节点通常为空） */
+    /** 标题文本（章节节点才有值） */
     private String title;
 
-    /** 锚点文本，nodeCode + title 的组合（如 "H2_3 背景介绍"），用于目录跳转和导航定位 */
+    /** 锚点文本（code + title，用于目录导航） */
     private String anchorText;
 
-    /** 规范路径，机器可读的精确路径表示，如 "/document/section[0]/h2[1]"，用于程序定位和精确检索 */
+    /** 规范路径（如 /document/h1_2），机器可读 */
     private String canonicalPath;
 
-    /** 章节路径，人类可读的面包屑路径，如 "第一章 > 1.1 概述 > 1.1.1 背景"，用于前端展示 */
+    /** 面包屑路径（如 "第一章 > 1.1 概述"），人类可读 */
     private String sectionPath;
 
-    /** 节点下的正文内容（段落、列表项等叶子节点才有值，纯标题节点此字段为空） */
+    /** 正文内容，逐行累积 */
     private String contentText;
 
-    /** 在同级结构中的位置索引（如列表第3项则为 3），用于排序和序号展示 */
-    private Integer itemIndex;
+    /** 同级序号（如列表第3项为3），对应 {@link DocumentStructureNodeSignal#getSequenceNo()} */
+    private Integer sequenceNo;
+
+    /** 数字路径 [1,2,3]，用于父标题精确匹配 */
+    @Builder.Default
+    private List<Integer> numericPath = new ArrayList<>();
+
+    /** 标题体系：markdown / chapter / appendix / decimal / plain */
+    private String sourceFamily;
+
+    /** 置信度 0.0~1.0 */
+    private double confidence;
+
+    // ========================================================================
+    // 便捷方法
+    // ========================================================================
+
+    /** @return true 如果是章节节点 */
+    public boolean isSection() {
+        return DocumentStructureNodeTypeEnum.CHAPTER.getCode().equals(nodeType);
+    }
+
+    /** @return true 如果是列表/步骤节点 */
+    public boolean isListLike() {
+        return DocumentStructureNodeTypeEnum.STEP.getCode().equals(nodeType)
+                || DocumentStructureNodeTypeEnum.LIST_ITEM.getCode().equals(nodeType);
+    }
+
+    /**
+     * 追加一行正文。用于 hierarchyResolver 构建阶段。
+     *
+     * @param line 待追加文本（null/blank 忽略）
+     */
+    public void appendLine(String line) {
+        if (line == null || line.isBlank()) {
+            return;
+        }
+        String normalized = line.trim();
+        if (StringUtils.isEmpty(this.contentText)) {
+            this.contentText = normalized;
+        } else {
+            this.contentText = this.contentText + "\n" + normalized;
+        }
+    }
 }

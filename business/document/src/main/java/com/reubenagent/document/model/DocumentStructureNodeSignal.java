@@ -33,7 +33,7 @@ public class DocumentStructureNodeSignal {
     /** 信号类型（HEADING / LIST_ITEM / BODY / BLANK / ...） */
     private DocumentStructureNodeSignalEnum kind;
 
-    /** 标题编码（Signal 层保留解析时的原始编码，如 "1.2.3"、"第一章"、"附录A"），与 IntermediateNode 层的标准化编码（如 "H2_3"）不同 */
+    /** 标题编码（原始格式，如 "1.2.3"、"第一章"、"附录A"） */
     private String headingCode;
 
     /** 序列号（如 "第3步" → 3、"5. xxx" → 5），非列表/步骤信号为 null */

@@ -15,6 +15,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -311,7 +312,7 @@ public class DocumentStructureNodeAmbiguityResolver {
         signal.setConfidence(Math.max(signal.getConfidence(), DISAMBIGUATED_CONFIDENCE_FLOOR));
 
         // 追加消解原因（reasons 可能为 List.of() 不可变列表，需新建）
-        List<String> newReasons = new java.util.ArrayList<>(signal.getReasons());
+        List<String> newReasons = new ArrayList<>(signal.getReasons());
         newReasons.add(LLM_DISAMBIGUATED_REASON);
         signal.setReasons(newReasons);
 
