@@ -51,27 +51,24 @@ public class DocumentStructureNodeExtractor {
         String normalizedTitle = StringUtils.defaultIfBlank(documentTitle, "文档").trim();
         String normalizedText = StringUtils.defaultIfBlank(parsedText, "").trim();
 
+        log.debug("结构提取开始: title={}, textLen={}", normalizedTitle, normalizedText.length());
+
         // 空文本兜底：返回只含一个根节点的列表
         if (normalizedText.isBlank()) {
-            return List.of(new DocumentIntermediateStructureNode(
-                    1,                  // nodeNo
-                    null,               // logicalLineNo — 根节点无源行
-                    DocumentStructureNodeTypeEnum.ROOT.getCode(),
-                    null,               // parentNodeNo
-                    null,               // prevSiblingNodeNo
-                    null,               // nextSiblingNodeNo
-                    0,                  // depth
-                    "",                 // nodeCode
-                    normalizedTitle,    // title
-                    normalizedTitle,    // anchorText
-                    "/document",        // canonicalPath
-                    "",                 // sectionPath
-                    "",                 // contentText
-                    null,               // sequenceNo
-                    new ArrayList<>(),  // numericPath
-                    "document",         // sourceFamily
-                    1.0D                // confidence
-            ));
+            return List.of(DocumentIntermediateStructureNode.builder()
+                    .nodeNo(1)
+                    .nodeType(DocumentStructureNodeTypeEnum.ROOT.getCode())
+                    .depth(0)
+                    .nodeCode("")
+                    .title(normalizedTitle)
+                    .anchorText(normalizedTitle)
+                    .canonicalPath("/document")
+                    .sectionPath("")
+                    .contentText("")
+                    .numericPath(new ArrayList<>())
+                    .sourceFamily("document")
+                    .confidence(1.0D)
+                    .build());
         }
 
         // Stage 1: 规则引擎信号提取

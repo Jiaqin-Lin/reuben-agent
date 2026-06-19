@@ -214,6 +214,8 @@ public class DocumentStructureNodeSignalExtractor {
      */
     public DocumentStructureNodeSignalBatch extract(String documentTitle, String parsedText) {
         List<DocumentStructureNodeLogicalLine> logicalLines = buildLogicalLines(parsedText);
+        log.debug("Stage 1 信号提取开始: {} 个逻辑行", logicalLines.size());
+
         Map<String, Integer> logicalLineFrequencyMap = countLogicalLineFrequency(logicalLines);
         List<LogicalLineContext> contextList = buildLogicalLineContexts(logicalLines);
 
@@ -241,6 +243,9 @@ public class DocumentStructureNodeSignalExtractor {
         List<String> contextLines = logicalLines.stream()
                 .map(DocumentStructureNodeLogicalLine::trimmedText)
                 .toList();
+
+        long headingCount = signals.stream().filter(DocumentStructureNodeSignal::isHeadingLike).count();
+        log.debug("Stage 1 信号提取完成: {} 个信号 ({} 个标题型)", signals.size(), headingCount);
         return new DocumentStructureNodeSignalBatch(contextLines, signals);
     }
 

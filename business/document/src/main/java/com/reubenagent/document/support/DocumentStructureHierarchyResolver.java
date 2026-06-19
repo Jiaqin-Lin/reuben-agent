@@ -93,6 +93,7 @@ public class DocumentStructureHierarchyResolver {
             String documentTitle,
             List<DocumentStructureNodeSignal> signals) {
 
+        log.debug("Stage 3 层级解析开始: {} 个信号", signals.size());
         List<DocumentIntermediateStructureNode> drafts = new ArrayList<>();
         Map<Integer, DocumentIntermediateStructureNode> nodeMap = new LinkedHashMap<>();
 

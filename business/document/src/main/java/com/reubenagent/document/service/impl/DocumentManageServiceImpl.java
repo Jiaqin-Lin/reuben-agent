@@ -26,6 +26,14 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.Map;
 
+/**
+ * 文档管理服务实现 —— 上传文档到 MinIO 并创建解析-策略-索引异步任务。
+ *
+ * <p>上传流程：校验文件 → 生成雪花 ID → 上传 MinIO → 事务写入 Document/Task/TaskLog 三表。</p>
+ *
+ * @author reuben
+ * @since 2026-06-14
+ */
 @Slf4j
 @AllArgsConstructor
 @Service
@@ -128,6 +136,7 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
             return new DocumentUploadVo(documentId, taskId, document.getDocumentName(), document.getParseStatus(), document.getStrategyStatus(), document.getIndexStatus());
         });
 
+        log.info("文档上传完成 documentId={} taskId={} fileName={}", documentId, taskId, originalFileName);
         return documentUploadVo;
     }
 

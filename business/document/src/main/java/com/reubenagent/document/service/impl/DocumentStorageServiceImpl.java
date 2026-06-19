@@ -8,7 +8,7 @@ import com.reubenagent.document.service.IDocumentStorageService;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
-import lombok.RequiredArgsConstructor;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.http.MediaType;
@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 
 /**
  * MinIO 文档存储服务实现。
@@ -24,8 +25,8 @@ import java.io.InputStream;
  * @since 2026-06-14
  */
 @Slf4j
+@AllArgsConstructor
 @Service
-@RequiredArgsConstructor
 public class DocumentStorageServiceImpl implements IDocumentStorageService {
 
     private final MinioClient minioClient;
@@ -48,11 +49,36 @@ public class DocumentStorageServiceImpl implements IDocumentStorageService {
                     .contentType(StringUtils.isNotBlank(contentType) ? contentType : MediaType.APPLICATION_OCTET_STREAM_VALUE)
                     .build());
         } catch (Exception e) {
+            log.error("MinIO 上传原文件失败 documentId={} objectName={}", documentId, objectName, e);
             throw new DocumentException(DocumentManageCode.MINIO_UPLOAD_FAIL, e.getMessage(), e);
         }
 
         return new StoredObjectInfo(minio.getBucketName(), objectName,
                 buildObjectUrl(minio, objectName));
+    }
+
+    @Override
+    public String uploadParsedText(Long documentId, String parsedText) {
+        DocumentProperties.Minio minio = properties.getMinio();
+
+        String objectName = minio.getObjectPrefix()
+                + "/" + documentId
+                + ".txt";
+
+        byte[] parsedTextBytes = parsedText.getBytes(StandardCharsets.UTF_8);
+
+        try {
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(minio.getBucketName())
+                    .object(objectName)
+                    .stream(new ByteArrayInputStream(parsedTextBytes), parsedTextBytes.length, -1)
+                    .contentType(new MediaType(MediaType.TEXT_PLAIN, StandardCharsets.UTF_8).toString())
+                    .build());
+        } catch (Exception e) {
+            log.error("MinIO 上传解析文本失败 documentId={} objectName={}", documentId, objectName, e);
+            throw new DocumentException(DocumentManageCode.MINIO_UPLOAD_FAIL, e.getMessage(), e);
+        }
+        return objectName;
     }
 
     @Override
@@ -64,6 +90,7 @@ public class DocumentStorageServiceImpl implements IDocumentStorageService {
                     .build());
             return inputStream.readAllBytes();
         } catch (Exception e) {
+            log.error("MinIO 下载失败 objectName={}", objectName, e);
             throw new DocumentException(DocumentManageCode.MINIO_DOWNLOAD_FAIL, e.getMessage(), e);
         }
     }

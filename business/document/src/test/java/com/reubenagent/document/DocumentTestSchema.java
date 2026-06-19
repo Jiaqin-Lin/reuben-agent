@@ -16,6 +16,7 @@ public final class DocumentTestSchema {
     public static void dropTables(JdbcTemplate jdbcTemplate) {
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task_log");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_structure_node");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document");
     }
 
@@ -104,10 +105,38 @@ public final class DocumentTestSchema {
             """);
     }
 
-    /** 一步创建全部三张表 */
+    /** 创建 document_structure_node 表 */
+    public static void createDocumentStructureNodeTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_document_structure_node (
+                id                  BIGINT        NOT NULL PRIMARY KEY,
+                document_id         BIGINT        NOT NULL,
+                parse_task_id       BIGINT        NOT NULL,
+                node_no             INT           NOT NULL,
+                node_type           TINYINT       DEFAULT NULL,
+                parent_node_id      BIGINT        DEFAULT NULL,
+                prev_sibling_node_id BIGINT       DEFAULT NULL,
+                next_sibling_node_id BIGINT       DEFAULT NULL,
+                depth               INT           DEFAULT 0,
+                node_code           VARCHAR(128)  DEFAULT NULL,
+                title               VARCHAR(1024) DEFAULT NULL,
+                anchor_text         VARCHAR(512)  DEFAULT NULL,
+                canonical_path      VARCHAR(1024) DEFAULT NULL,
+                section_path        VARCHAR(1024) DEFAULT NULL,
+                content_text        MEDIUMTEXT    DEFAULT NULL,
+                item_index          INT           DEFAULT NULL,
+                create_time         DATETIME      DEFAULT NULL,
+                update_time         DATETIME      DEFAULT NULL,
+                is_deleted          TINYINT       DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
+    /** 一步创建全部表 */
     public static void createAllTables(JdbcTemplate jdbcTemplate) {
         createDocumentTable(jdbcTemplate);
         createDocumentTaskTable(jdbcTemplate);
         createDocumentTaskLogTable(jdbcTemplate);
+        createDocumentStructureNodeTable(jdbcTemplate);
     }
 }

@@ -115,6 +115,8 @@ public class DocumentStructureTreeValidator {
             return List.of();
         }
 
+        log.debug("Stage 4 树验证开始: {} 个草稿节点", drafts.size());
+
         // 构建 nodeNo → 节点 的映射表，后续所有修复步骤直接操作此 Map
         Map<Integer, DocumentIntermediateStructureNode> draftMap = new LinkedHashMap<>();
         for (DocumentIntermediateStructureNode draft : drafts) {
@@ -146,9 +148,11 @@ public class DocumentStructureTreeValidator {
         rebuildSiblingLinks(draftMap);
 
         // 按 nodeNo 升序排列
-        return draftMap.values().stream()
+        List<DocumentIntermediateStructureNode> result = draftMap.values().stream()
                 .sorted(Comparator.comparingInt(DocumentIntermediateStructureNode::getNodeNo))
                 .toList();
+        log.debug("Stage 4 树验证完成: {} 个最终节点", result.size());
+        return result;
     }
 
     // ========================================================================
