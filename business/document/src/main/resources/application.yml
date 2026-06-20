@@ -68,6 +68,16 @@ reuben:
       secret-key: minioadmin
       bucket-name: reuben-agent-document
       object-prefix: rag/document
+    pgvector:
+      table-name: public.reuben_agent_document_embedding
+      batch-size: 10
+      embedding-model: text-embedding-3-small
+    embedding:
+      dimension: 1536
+    strategy:
+      recursive-overlap-chars: 200
+      semantic-similarity-threshold: 0.7
+      llm-max-input-chars: 8000
 
 # =============================================================================
 # MyBatis-Plus

@@ -21,6 +21,10 @@ public class DocumentProperties {
 
     private Strategy strategy = new Strategy();
 
+    private Pgvector pgvector = new Pgvector();
+
+    private Embedding embedding = new Embedding();
+
     // ============ 内部类 — 按中间件/功能拆分 ============
 
     @Data
@@ -69,5 +73,33 @@ public class DocumentProperties {
         private Integer semanticMinChars = 1000;
         /** 低质量文档是否推荐 LLM 切分 */
         private Boolean recommendLlmWhenLowQuality = false;
+        /** 递归切分重叠字符数 */
+        private Integer recursiveOverlapChars = 200;
+        /** 语义切分相似度阈值（0~1，越低越容易切分） */
+        private Double semanticSimilarityThreshold = 0.7;
+        /** LLM 切分单次最大输入字符数 */
+        private Integer llmMaxInputChars = 8000;
+    }
+
+    /**
+     * PGVector 配置，绑定 {@code reuben.document.pgvector}。
+     */
+    @Data
+    public static class Pgvector {
+        /** 嵌入表名 */
+        private String tableName = "public.reuben_agent_document_embedding";
+        /** 向量化批量大小 */
+        private Integer batchSize = 10;
+        /** embedding 模型名称 */
+        private String embeddingModel = "text-embedding-3-small";
+    }
+
+    /**
+     * Embedding 通用配置，绑定 {@code reuben.document.embedding}。
+     */
+    @Data
+    public static class Embedding {
+        /** 向量维度 */
+        private Integer dimension = 1536;
     }
 }
