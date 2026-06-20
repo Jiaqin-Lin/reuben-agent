@@ -19,6 +19,8 @@ public class DocumentProperties {
 
     private StructureParsing structureParsing = new StructureParsing();
 
+    private Strategy strategy = new Strategy();
+
     // ============ 内部类 — 按中间件/功能拆分 ============
 
     @Data
@@ -54,5 +56,18 @@ public class DocumentProperties {
         private Double ambiguityConfidenceFloor = 0.45;
         /** 模糊信号置信度上限（高于此值不送 LLM，直接保留规则引擎分类） */
         private Double ambiguityConfidenceCeil = 0.80;
+    }
+
+    /**
+     * 策略推荐配置，绑定 {@code reuben.document.strategy}。
+     */
+    @Data
+    public static class Strategy {
+        /** 触发递归切分的字符数阈值（总字符数或最长段落字符数超过此值时推荐） */
+        private Integer recursiveMaxChars = 3000;
+        /** 触发语义切分的最小字符数 */
+        private Integer semanticMinChars = 1000;
+        /** 低质量文档是否推荐 LLM 切分 */
+        private Boolean recommendLlmWhenLowQuality = false;
     }
 }

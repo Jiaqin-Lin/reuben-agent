@@ -15,6 +15,8 @@ public final class DocumentTestSchema {
     /** 删除所有测试表（先子后父，避免外键约束冲突） */
     public static void dropTables(JdbcTemplate jdbcTemplate) {
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_profile");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_strategy_step");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_strategy_plan");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task_log");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_structure_node");
@@ -158,6 +160,49 @@ public final class DocumentTestSchema {
             """);
     }
 
+    /** 创建 document_strategy_plan 表 */
+    public static void createDocumentStrategyPlanTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_document_strategy_plan (
+                id                  BIGINT        NOT NULL PRIMARY KEY,
+                document_id         BIGINT        NOT NULL,
+                plan_version        INT           DEFAULT 1,
+                plan_source         TINYINT       DEFAULT 1,
+                plan_status         TINYINT       DEFAULT 1,
+                strategy_count      INT           DEFAULT 0,
+                strategy_snapshot   VARCHAR(256)  DEFAULT NULL,
+                recommend_reason    VARCHAR(1024) DEFAULT NULL,
+                adjust_note         VARCHAR(1024) DEFAULT NULL,
+                confirm_user_id     BIGINT        DEFAULT NULL,
+                confirm_time        DATETIME      DEFAULT NULL,
+                create_time         DATETIME      DEFAULT NULL,
+                update_time         DATETIME      DEFAULT NULL,
+                is_deleted          TINYINT       DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
+    /** 创建 document_strategy_step 表 */
+    public static void createDocumentStrategyStepTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_document_strategy_step (
+                id                  BIGINT        NOT NULL PRIMARY KEY,
+                plan_id             BIGINT        NOT NULL,
+                document_id         BIGINT        NOT NULL,
+                step_no             INT           DEFAULT NULL,
+                pipeline_type       VARCHAR(16)   DEFAULT NULL,
+                strategy_type       TINYINT       DEFAULT NULL,
+                strategy_role       TINYINT       DEFAULT NULL,
+                source_type         TINYINT       DEFAULT 1,
+                execute_status      TINYINT       DEFAULT 1,
+                recommend_reason    VARCHAR(512)  DEFAULT NULL,
+                create_time         DATETIME      DEFAULT NULL,
+                update_time         DATETIME      DEFAULT NULL,
+                is_deleted          TINYINT       DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
     /** 一步创建全部表 */
     public static void createAllTables(JdbcTemplate jdbcTemplate) {
         createDocumentTable(jdbcTemplate);
@@ -165,5 +210,7 @@ public final class DocumentTestSchema {
         createDocumentTaskLogTable(jdbcTemplate);
         createDocumentStructureNodeTable(jdbcTemplate);
         createDocumentProfileTable(jdbcTemplate);
+        createDocumentStrategyPlanTable(jdbcTemplate);
+        createDocumentStrategyStepTable(jdbcTemplate);
     }
 }

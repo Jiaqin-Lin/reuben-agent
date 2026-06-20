@@ -329,6 +329,51 @@ CREATE TABLE IF NOT EXISTS `reuben_agent_topic_document_relation` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='主题文档关联';
 
 -- ---------------------------------------------------------------------------
+-- 文档策略方案
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_document_strategy_plan` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `document_id` BIGINT NOT NULL COMMENT '所属文档ID',
+    `plan_version` INT DEFAULT 1 COMMENT '方案版本号（同一文档递增）',
+    `plan_source` TINYINT DEFAULT 1 COMMENT '方案来源：1=系统推荐 2=用户调整',
+    `plan_status` TINYINT DEFAULT 1 COMMENT '方案状态：1=待确认 2=已确认 3=已执行 4=已废弃',
+    `strategy_count` INT DEFAULT 0 COMMENT '策略步骤总数',
+    `strategy_snapshot` VARCHAR(256) DEFAULT NULL COMMENT '策略组合快照（如 PARENT:1;CHILD:3,2）',
+    `recommend_reason` VARCHAR(1024) DEFAULT NULL COMMENT '推荐理由（分号分隔）',
+    `adjust_note` VARCHAR(1024) DEFAULT NULL COMMENT '用户调整说明',
+    `confirm_user_id` BIGINT DEFAULT NULL COMMENT '确认人ID',
+    `confirm_time` DATETIME DEFAULT NULL COMMENT '确认时间',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_document_id` (`document_id`),
+    KEY `idx_plan_status` (`plan_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档策略方案';
+
+-- ---------------------------------------------------------------------------
+-- 文档策略步骤
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_document_strategy_step` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `plan_id` BIGINT NOT NULL COMMENT '所属方案ID',
+    `document_id` BIGINT NOT NULL COMMENT '所属文档ID（冗余，便于按文档查询）',
+    `step_no` INT DEFAULT NULL COMMENT '步骤序号（从 1 开始）',
+    `pipeline_type` VARCHAR(16) DEFAULT NULL COMMENT '管道类型：PARENT / CHILD',
+    `strategy_type` TINYINT DEFAULT NULL COMMENT '策略类型：1=结构化 2=递归 3=语义 4=大模型',
+    `strategy_role` TINYINT DEFAULT NULL COMMENT '策略角色：1=主力 2=优化 3=兜底 4=增强',
+    `source_type` TINYINT DEFAULT 1 COMMENT '步骤来源：1=系统推荐 2=用户新增 3=用户保留',
+    `execute_status` TINYINT DEFAULT 1 COMMENT '执行状态：1=待执行 2=执行中 3=成功 4=失败 5=跳过',
+    `recommend_reason` VARCHAR(512) DEFAULT NULL COMMENT '推荐理由',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0,
+    PRIMARY KEY (`id`),
+    KEY `idx_plan_id` (`plan_id`),
+    KEY `idx_document_id` (`document_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文档策略步骤';
+
+-- ---------------------------------------------------------------------------
 -- 知识路由追踪
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `reuben_agent_knowledge_route_trace` (
