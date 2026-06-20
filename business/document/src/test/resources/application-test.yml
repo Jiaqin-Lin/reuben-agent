@@ -47,3 +47,9 @@ mybatis-plus:
 logging:
   level:
     com.reubenagent: DEBUG
+
+# 测试环境禁用 pgvector，避免干扰 MySQL 集成测试
+reuben:
+  document:
+    pgvector:
+      enabled: false

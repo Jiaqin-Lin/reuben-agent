@@ -69,6 +69,11 @@ reuben:
       bucket-name: reuben-agent-document
       object-prefix: rag/document
     pgvector:
+      host: 127.0.0.1
+      port: 5432
+      database: reuben_agent_pgvector
+      username: reuben
+      password: reuben123
       table-name: public.reuben_agent_document_embedding
       batch-size: 10
       embedding-model: text-embedding-3-small

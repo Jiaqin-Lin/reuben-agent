@@ -19,6 +19,7 @@ public enum DocumentManageCode implements BaseEnum {
     READ_FILE_FAIL(20004, "读取文件失败"),
     MINIO_UPLOAD_FAIL(20005, "minio 上传失败"),
     MINIO_DOWNLOAD_FAIL(20006, "minio 下载失败"),
+    VECTORIZE_FAILED(20007, "向量化失败"),
     ;
 
     @Getter

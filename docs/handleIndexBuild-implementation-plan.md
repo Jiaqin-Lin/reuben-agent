@@ -206,35 +206,35 @@ Phase 9 (集成 & 验证) ──────────────────
 
 ### 5.1 `IDocumentVectorGateway` 接口
 
-- [ ] 创建文件 `service/IDocumentVectorGateway.java`
-- [ ] 方法：
+- [x] 创建文件 `service/IDocumentVectorGateway.java`
+- [x] 方法：
   - `DocumentVectorizationResult vectorize(List<DocumentChunk> chunks)` — 返回 result VO 而非修改入参（优化 #3）
   - `void deleteByDocumentId(Long documentId)`
 
 ### 5.2 `DocumentVectorizationResult` VO
 
-- [ ] 创建文件 `model/DocumentVectorizationResult.java`
-- [ ] 字段：`int totalCount`, `int successCount`, `int failedCount`, `List<Long> successChunkIds`, `List<Long> failedChunkIds`
-- [ ] 让调用方显式知道哪些 chunk 成功了、哪些失败了（优化 #4）
+- [x] 创建文件 `model/DocumentVectorizationResult.java`
+- [x] 字段：`int totalCount`, `int successCount`, `int failedCount`, `List<Long> successChunkIds`, `List<Long> failedChunkIds`
+- [x] 让调用方显式知道哪些 chunk 成功了、哪些失败了（优化 #4）
 
 ### 5.3 `DefaultDocumentVectorGateway` 实现
 
-- [ ] 创建文件 `service/impl/DefaultDocumentVectorGateway.java`
-- [ ] 注入：`JdbcTemplate`（pgvector 数据源）、`EmbeddingModel`（Spring AI）、`DocumentProperties`
-- [ ] `vectorize()` 流程：
+- [x] 创建文件 `service/impl/DefaultDocumentVectorGateway.java`
+- [x] 注入：`JdbcTemplate`（pgvector 数据源）、`EmbeddingModel`（Spring AI）、`DocumentProperties`
+- [x] `vectorize()` 流程：
   1. 过滤 `chunkText` 非空的 chunk
   2. 按 `batchSize` 分批
   3. 每批调用 `EmbeddingModel.embed()` 获取 `float[]`
   4. `JdbcTemplate.batchUpdate` 做 `ON CONFLICT (id) DO UPDATE` 幂等 UPSERT
   5. 返回 `DocumentVectorizationResult`（不修改入参 chunk）
-- [ ] `toVectorLiteral(float[])` — `float[]` → `[0.12,0.34,...]` PGVector 字面量
-- [ ] `resolveEmbeddingModelName()` — 从 `DocumentProperties.Pgvector.embeddingModel` 读取
-- [ ] `deleteByDocumentId()` — `DELETE FROM <table> WHERE document_id = ?`
+- [x] `toVectorLiteral(float[])` — `float[]` → `[0.12,0.34,...]` PGVector 字面量
+- [x] `resolveEmbeddingModelName()` — 从 `DocumentProperties.Pgvector.embeddingModel` 读取
+- [x] `deleteByDocumentId()` — `DELETE FROM <table> WHERE document_id = ?`
 
 ### 5.4 PGVector 数据源配置
 
-- [ ] 确认 `application.yml` 中 PostgreSQL + pgvector 数据源已配置
-- [ ] 如未配置，新增 `PgVectorConfiguration`（`@Configuration`），创建独立的 `JdbcTemplate` bean 指向 pgvector 数据源
+- [x] 确认 `application.yml` 中 PostgreSQL + pgvector 数据源已配置
+- [x] 新增 `DocumentPgVectorConfiguration`（`@Configuration`），创建独立的 `JdbcTemplate` bean 指向 pgvector 数据源
 
 ---
 
