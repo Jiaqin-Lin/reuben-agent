@@ -14,6 +14,7 @@ public final class DocumentTestSchema {
 
     /** 删除所有测试表（先子后父，避免外键约束冲突） */
     public static void dropTables(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_profile");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task_log");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_task");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_structure_node");
@@ -132,11 +133,37 @@ public final class DocumentTestSchema {
             """);
     }
 
+    /** 创建 document_profile 表 */
+    public static void createDocumentProfileTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_document_profile (
+                id                  BIGINT        NOT NULL PRIMARY KEY,
+                document_id         BIGINT        NOT NULL,
+                profile_version     INT           DEFAULT 1,
+                document_summary    TEXT          DEFAULT NULL,
+                document_type       VARCHAR(64)   DEFAULT NULL,
+                core_topics         TEXT          DEFAULT NULL,
+                example_questions   TEXT          DEFAULT NULL,
+                graph_friendly      TINYINT       DEFAULT 0,
+                supports_graph_outline TINYINT    DEFAULT 0,
+                supports_item_lookup   TINYINT    DEFAULT 0,
+                supports_graph_assist  TINYINT    DEFAULT 0,
+                profile_source      VARCHAR(32)   DEFAULT 'auto',
+                profile_status      TINYINT       DEFAULT 1,
+                error_msg           VARCHAR(1024) DEFAULT NULL,
+                create_time         DATETIME      DEFAULT NULL,
+                update_time         DATETIME      DEFAULT NULL,
+                is_deleted          TINYINT       DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
     /** 一步创建全部表 */
     public static void createAllTables(JdbcTemplate jdbcTemplate) {
         createDocumentTable(jdbcTemplate);
         createDocumentTaskTable(jdbcTemplate);
         createDocumentTaskLogTable(jdbcTemplate);
         createDocumentStructureNodeTable(jdbcTemplate);
+        createDocumentProfileTable(jdbcTemplate);
     }
 }

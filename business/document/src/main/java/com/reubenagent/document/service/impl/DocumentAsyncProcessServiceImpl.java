@@ -2,6 +2,7 @@ package com.reubenagent.document.service.impl;
 
 import com.alibaba.fastjson.JSON;
 import com.reubenagent.document.entity.Document;
+import com.reubenagent.document.entity.DocumentStructureNode;
 import com.reubenagent.document.entity.DocumentTask;
 import com.reubenagent.document.entity.DocumentTaskLog;
 import com.reubenagent.document.enums.*;
@@ -11,6 +12,7 @@ import com.reubenagent.document.mapper.IDocumentTaskMapper;
 import com.reubenagent.document.model.DocumentParseResult;
 import com.reubenagent.document.service.IDocumentAsyncProcessService;
 import com.reubenagent.document.service.IDocumentParseResultService;
+import com.reubenagent.document.service.IDocumentProfileService;
 import com.reubenagent.document.service.IDocumentStorageService;
 import com.reubenagent.document.service.IDocumentStructureNodeService;
 import lombok.AllArgsConstructor;
@@ -39,6 +41,7 @@ public class DocumentAsyncProcessServiceImpl implements IDocumentAsyncProcessSer
     private final IDocumentStorageService documentStorageService;
     private final IDocumentParseResultService documentParseResultService;
     private final IDocumentStructureNodeService structureNodeService;
+    private final IDocumentProfileService documentProfileService;
 
     @Override
     public void handleParseStrategyRoute(Long documentId, Long taskId) {
@@ -86,7 +89,11 @@ public class DocumentAsyncProcessServiceImpl implements IDocumentAsyncProcessSer
                     documentId, documentParseResult.getParsedText());
 
             // 阶段 4：结构节点持久化
-            structureNodeService.saveNodes(documentId, taskId, documentParseResult.getStructureNodes());
+            List<DocumentStructureNode> structureNodes = structureNodeService.saveNodes(
+                    documentId, taskId, documentParseResult.getStructureNodes());
+
+            // 阶段 5：生成文档画像
+            documentProfileService.generateProfile(documentId, documentParseResult, structureNodes);
 
         } catch (Exception e) {
             log.error("文档解析失败 documentId={} taskId={}", documentId, taskId, e);
