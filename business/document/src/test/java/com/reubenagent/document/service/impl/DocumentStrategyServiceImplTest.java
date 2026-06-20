@@ -10,6 +10,8 @@ import com.reubenagent.document.enums.DocumentStrategyTypeEnum;
 import com.reubenagent.document.model.DocumentParseResult;
 import com.reubenagent.document.model.DocumentStrategyPlanDraft;
 import com.reubenagent.document.model.DocumentStrategyStepDraft;
+import com.reubenagent.document.service.IDocumentStructureNodeService;
+import com.reubenagent.document.support.PromptTemplateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -20,6 +22,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.ai.chat.model.ChatModel;
 
 import java.util.List;
 
@@ -33,6 +36,15 @@ class DocumentStrategyServiceImplTest {
 
     @Mock
     private DocumentProperties documentProperties;
+
+    @Mock
+    private IDocumentStructureNodeService structureNodeService;
+
+    @Mock
+    private PromptTemplateService promptTemplateService;
+
+    @Mock
+    private ChatModel chatModel;
 
     @InjectMocks
     private DocumentStrategyServiceImpl strategyService;

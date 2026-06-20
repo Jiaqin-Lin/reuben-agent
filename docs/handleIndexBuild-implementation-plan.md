@@ -246,7 +246,7 @@ Phase 9 (集成 & 验证) ──────────────────
 
 ### 6.1 `IDocumentStrategyService` 接口扩展
 
-- [ ] 新增方法签名：
+- [x] 新增方法签名：
   ```java
   List<ParentBlockCandidate> buildParentBlocks(
       Document document,
@@ -257,57 +257,62 @@ Phase 9 (集成 & 验证) ──────────────────
 
 ### 6.2 `DocumentStrategyServiceImpl.buildParentBlocks()` 编排器
 
-- [ ] 按 `pipelineType` 将 steps 分为 parent steps 和 child steps
-- [ ] 校验两列表均非空（为空中断抛 `DocumentException`）
-- [ ] 加载文档结构节点 `structureNodeService.listDocumentNodes(documentId)`
-- [ ] 调用 `buildParentSeedList(parsedText, parentSteps, structureNodes)` 生成 parent seed 列表
-- [ ] 对每个 parent seed 去重 + 调用 `buildChildSeedList(parentSeed, childSteps, structureNodes)` 生成 child chunk 列表
-- [ ] 组装 `ParentBlockCandidate`（parent seed + 其 children）
-- [ ] 去重：`cleanupParentBlockList()`（基于 sectionPath + text 去重）
-- [ ] 返回最终列表
+- [x] 按 `pipelineType` 将 steps 分为 parent steps 和 child steps
+- [x] 校验两列表均非空（为空中断抛 `DocumentException`）
+- [x] 加载文档结构节点 `structureNodeService.listDocumentNodes(documentId)`
+- [x] 调用 `buildParentSeedList(parsedText, parentSteps, structureNodes)` 生成 parent seed 列表
+- [x] 对每个 parent seed 去重 + 调用 `buildChildSeedList(parentSeed, childSteps, structureNodes)` 生成 child chunk 列表
+- [x] 组装 `ParentBlockCandidate`（parent seed + 其 children）
+- [x] 去重：`cleanupParentBlockList()`（基于 sectionPath + text 去重）
+- [x] 返回最终列表
 
 ### 6.3 `buildParentSeedList` / `buildChildSeedList`
 
-- [ ] 实现管线执行引擎（遍历 steps，每个 step 根据 strategyType 调用对应策略）
-- [ ] step 按 `DocumentStrategyRoleEnum` 处理：PRIMARY → 主切分，OPTIMIZE → 合并/拆分优化，FALLBACK → 仅在前序 step 无产出时生效，ENHANCE → 追加补充
-- [ ] step 间去重（`cleanupChunkList`）
+- [x] 实现管线执行引擎（遍历 steps，每个 step 根据 strategyType 调用对应策略）
+- [x] step 按 `DocumentStrategyRoleEnum` 处理：PRIMARY → 主切分，OPTIMIZE → 合并/拆分优化，FALLBACK → 仅在前序 step 无产出时生效，ENHANCE → 追加补充
+- [x] step 间去重（`cleanupChunkList`）
 
-### 6.4 `applyStructureChunking(String text, DocumentStrategyStep step, List<DocumentIntermediateStructureNode> nodes)`
+### 6.4 `applyStructureChunking(String text, DocumentStrategyStep step, List<DocumentStructureNode> nodes)`
 
-- [ ] **优势**：reuben-agent 已有成熟的 `DocumentStructureNodeExtractor` 4-Stage Pipeline 产出 `DocumentIntermediateStructureNode` 树，直接复用
-- [ ] 按 heading 边界提取 parent chunks（每个 heading section 为一个 parent）
-- [ ] 每个 parent 内按段落/逻辑行拆分为 child chunks
-- [ ] 过滤空块、过小块（minChars 阈值）
-- [ ] `sectionPath` 规范：`title > chapter > step > list_item` 拼接
+- [x] **优势**：reuben-agent 已有成熟的 `DocumentStructureNodeExtractor` 4-Stage Pipeline，直接复用 `DocumentStructureNode` 实体
+- [x] 按 heading 边界提取 parent chunks（每个 CHAPTER 节点为一个 parent）
+- [x] 每个 parent 内按段落/逻辑行拆分为 child chunks
+- [x] 过滤空块、噪声行（`isNoiseLine`）
+- [x] `sectionPath` 从节点已有字段获取，支持 `resolveSectionPath` 向上回溯
 
 ### 6.5 `applyRecursiveChunking(String text, DocumentStrategyStep step)`
 
-- [ ] 按 `DocumentProperties.Strategy.recursiveMaxChars` 阈值切分
-- [ ] 先尝试按段落（`\n\n`）切分
-- [ ] 超阈值的段落按句子（`。|. |! |? `）切分
-- [ ] 仍超阈值的按固定窗口（charCount）切分 + overlap（`recursiveOverlapChars`）
-- [ ] 生成 `ChunkCandidate`，`sectionPath` 置为 `documentTitle`（无结构信息时的回退）
+- [x] 按 `DocumentProperties.Strategy.recursiveMaxChars` 阈值切分
+- [x] 先尝试按段落（`\n\n`）切分
+- [x] 超阈值的段落按句子（`splitSentences`）切分
+- [x] 仍超阈值的按固定窗口（charCount）切分 + overlap（`recursiveOverlapChars`）
+- [x] 生成 `ChunkCandidate`
 
 ### 6.6 `applySemanticChunking(String text, DocumentStrategyStep step)`
 
-- [ ] 以句子为最小单元计算相邻句间 Jaccard 相似度
-- [ ] 相似度 < `semanticSimilarityThreshold` → 此处为语义边界，切分
-- [ ] 跨边界合并过小的 segment
-- [ ] 需要 `EmbeddingModel` 吗？super-agent 用的是纯 Jaccard（基于词袋），无 Embedding 依赖——保持一致
+- [x] 以句子为最小单元计算相邻句间 Jaccard 相似度
+- [x] 相似度 < `semanticSimilarityThreshold` → 此处为语义边界，切分
+- [x] 跨边界合并过小的 segment（minChars=50）
+- [x] 纯 Jaccard 词袋（tokenize 1-2gram），无 Embedding 依赖
 
 ### 6.7 `applyLlmChunking(String text, DocumentStrategyStep step)`
 
-- [ ] 输入切分为不超过 `llmMaxInputChars` 的段落组
-- [ ] Prompt：识别语义断点，返回断点索引列表
-- [ ] 依赖：注入 `ChatModel`（Spring AI）
-- [ ] 用 `PromptTemplateService` 管理 prompt 模板（与现有风格统一）
+- [x] 输入切分为不超过 `llmMaxInputChars` 的段落组
+- [x] Prompt：识别语义断点，返回断点索引列表（`prompt/document-llm-chunking.st`）
+- [x] 依赖：注入 `ChatModel`（Spring AI）
+- [x] 用 `PromptTemplateService` 管理 prompt 模板
+- [x] LLM 调用失败时降级为按句子切分
 
 ### 6.8 辅助方法
 
-- [ ] `cleanupChunkList(List<ChunkCandidate>)` — 基于 sectionPath + text 哈希去重
-- [ ] `cleanupParentBlockList(List<ParentBlockCandidate>)` — 同上，合并同 sectionPath 的 parent
-- [ ] `resolveSectionPath(structureNode)` — 从树节点向上回溯构造路径
-- [ ] `resolveCanonicalPath(structureNode)` — 路径片段归一化（去 #、去多余空格）
+- [x] `cleanupChunkList(List<ChunkCandidate>)` — 基于 sectionPath + text 哈希去重
+- [x] `cleanupParentBlockList(List<ParentBlockCandidate>)` — 合并同 sectionPath 的 parent，子 chunk 自动去重
+- [x] `resolveSectionPath(structureNode, nodeMap)` — 从树节点向上回溯构造路径
+- [x] `resolveCanonicalPath(path)` — 路径片段归一化（去 #、去多余空格、小写）
+- [x] `splitSentences(text)` — 句子边界拆分
+- [x] `jaccardSimilarity(a, b)` — 词袋 Jaccard 相似度
+- [x] `isNoiseLine(line)` — 噪声行过滤（页码、分隔线、纯标点）
+- [x] `collectSubtreeText(node, childrenMap)` — 递归收集子树文本
 
 ---
 
