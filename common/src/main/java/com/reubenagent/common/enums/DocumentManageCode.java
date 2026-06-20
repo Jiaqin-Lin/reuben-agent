@@ -20,6 +20,8 @@ public enum DocumentManageCode implements BaseEnum {
     MINIO_UPLOAD_FAIL(20005, "minio 上传失败"),
     MINIO_DOWNLOAD_FAIL(20006, "minio 下载失败"),
     VECTORIZE_FAILED(20007, "向量化失败"),
+    INDEX_BUILD_FAILED(20008, "索引构建失败"),
+    CHUNK_EXECUTION_FAILED(20009, "切块执行失败"),
     ;
 
     @Getter

@@ -13,6 +13,10 @@ spring:
   ai:
     deepseek:
       api-key: fake-dev-key
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        model: bge-m3
 
   # ---------------------------------------------------------------------------
   # MySQL 8.0 — 关系型数据
@@ -83,9 +87,9 @@ reuben:
       password: reuben123
       table-name: public.reuben_agent_document_embedding
       batch-size: 10
-      embedding-model: text-embedding-3-small
+      embedding-model: bge-m3
     embedding:
-      dimension: 1536
+      dimension: 1024
 
 # =============================================================================
 # MyBatis-Plus

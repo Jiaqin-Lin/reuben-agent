@@ -43,10 +43,17 @@
             <artifactId>postgresql</artifactId>
         </dependency>
 
-        <!-- Spring AI DeepSeek (chat + embeddings) -->
+        <!-- Spring AI DeepSeek (chat) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-deepseek</artifactId>
+        </dependency>
+
+        <!-- Spring AI Ollama (local embeddings via bge-m3) -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-ollama</artifactId>
+            <version>${spring-ai.version}</version>
         </dependency>
 
         <!-- Kafka -->

@@ -3,28 +3,43 @@ package com.reubenagent.document.service.impl;
 import com.reubenagent.document.DocumentTestConfig;
 import com.reubenagent.document.DocumentTestSchema;
 import com.reubenagent.document.entity.Document;
+import com.reubenagent.document.entity.DocumentChunk;
+import com.reubenagent.document.entity.DocumentParentBlock;
 import com.reubenagent.document.entity.DocumentStrategyPlan;
 import com.reubenagent.document.entity.DocumentStrategyStep;
 import com.reubenagent.document.entity.DocumentTask;
 import com.reubenagent.document.entity.DocumentTaskLog;
+import com.reubenagent.document.enums.DocumentChunkSourceTypeEnum;
+import com.reubenagent.document.enums.DocumentIndexStatusEnum;
 import com.reubenagent.document.enums.DocumentParseStatusEnum;
+import com.reubenagent.document.enums.DocumentPlanStatusEnum;
+import com.reubenagent.document.enums.DocumentStrategyExecuteStatusEnum;
 import com.reubenagent.document.enums.DocumentStrategyStatusEnum;
 import com.reubenagent.document.enums.DocumentTaskEventTypeEnum;
 import com.reubenagent.document.enums.DocumentTaskStageEnum;
 import com.reubenagent.document.enums.DocumentTaskStatusEnum;
+import com.reubenagent.document.enums.DocumentTaskTypeEnum;
+import com.reubenagent.document.enums.DocumentVectorStatusEnum;
+import com.reubenagent.document.mapper.IDocumentChunkMapper;
 import com.reubenagent.document.mapper.IDocumentMapper;
+import com.reubenagent.document.mapper.IDocumentParentBlockMapper;
 import com.reubenagent.document.mapper.IDocumentStrategyPlanMapper;
 import com.reubenagent.document.mapper.IDocumentStrategyStepMapper;
 import com.reubenagent.document.mapper.IDocumentTaskLogMapper;
 import com.reubenagent.document.mapper.IDocumentTaskMapper;
+import com.reubenagent.document.model.ChunkCandidate;
 import com.reubenagent.document.model.DocumentParseResult;
 import com.reubenagent.document.model.DocumentStrategyPlanDraft;
 import com.reubenagent.document.model.DocumentStrategyStepDraft;
+import com.reubenagent.document.model.DocumentVectorizationResult;
+import com.reubenagent.document.model.ParentBlockCandidate;
 import com.reubenagent.document.service.IDocumentParseResultService;
 import com.reubenagent.document.service.IDocumentProfileService;
+import com.reubenagent.document.service.keyword.IDocumentKeywordSearchGateway;
 import com.reubenagent.document.service.IDocumentStorageService;
 import com.reubenagent.document.service.IDocumentStrategyService;
 import com.reubenagent.document.service.IDocumentStructureNodeService;
+import com.reubenagent.document.service.IDocumentVectorGateway;
 import com.reubenagent.framework.uid.UidGenerator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -84,6 +99,15 @@ class DocumentAsyncProcessServiceImplTest {
     private IDocumentProfileService profileService;
     @MockBean
     private IDocumentStrategyService strategyService;
+    @MockBean
+    private IDocumentVectorGateway vectorGateway;
+    @MockBean
+    private IDocumentKeywordSearchGateway keywordSearchGateway;
+
+    @Autowired
+    private IDocumentParentBlockMapper parentBlockMapper;
+    @Autowired
+    private IDocumentChunkMapper chunkMapper;
 
     private final AtomicLong uidSeq = new AtomicLong(1000);
 
@@ -177,6 +201,57 @@ class DocumentAsyncProcessServiceImplTest {
                 .recommendReason("结构化程度高；语义边界清晰；递归兜底")
                 .parentSteps(List.of(parentStep))
                 .childSteps(List.of(child1, child2))
+                .build();
+    }
+
+    // ============ 索引构建工厂方法 ============
+
+    private DocumentStrategyPlan createPlan(Long id, Long documentId) {
+        DocumentStrategyPlan plan = DocumentStrategyPlan.builder()
+                .id(id)
+                .documentId(documentId)
+                .planVersion(1)
+                .planSource(1)
+                .planStatus(DocumentPlanStatusEnum.CONFIRMED.getCode())
+                .strategyCount(3)
+                .strategySnapshot("PARENT:1;CHILD:3,2")
+                .recommendReason("测试方案")
+                .build();
+        strategyPlanMapper.insert(plan);
+        return plan;
+    }
+
+    private void createStep(Long id, Long planId, Long documentId, int stepNo,
+                            String pipelineType, int strategyType, int strategyRole) {
+        DocumentStrategyStep step = DocumentStrategyStep.builder()
+                .id(id)
+                .planId(planId)
+                .documentId(documentId)
+                .stepNo(stepNo)
+                .pipelineType(pipelineType)
+                .strategyType(strategyType)
+                .strategyRole(strategyRole)
+                .sourceType(1)
+                .executeStatus(DocumentStrategyExecuteStatusEnum.WAIT_EXECUTE.getCode())
+                .recommendReason("测试推荐")
+                .build();
+        strategyStepMapper.insert(step);
+    }
+
+    private ParentBlockCandidate createParentCandidate(String sectionPath, String text,
+                                                        List<ChunkCandidate> children) {
+        return ParentBlockCandidate.builder()
+                .sectionPath(sectionPath)
+                .text(text)
+                .sourceType(DocumentChunkSourceTypeEnum.ORIGINAL.getCode())
+                .childChunks(children != null ? children : List.of())
+                .build();
+    }
+
+    private ChunkCandidate createChildCandidate(String text) {
+        return ChunkCandidate.builder()
+                .text(text)
+                .sourceType(DocumentChunkSourceTypeEnum.ORIGINAL.getCode())
                 .build();
     }
 
@@ -379,6 +454,392 @@ class DocumentAsyncProcessServiceImplTest {
             assertThat(logs.get(0).getEventType()).isEqualTo(DocumentTaskEventTypeEnum.START.getCode());
             assertThat(logs.get(1).getEventType()).isEqualTo(DocumentTaskEventTypeEnum.COMPLETE.getCode());
             assertThat(logs.get(2).getEventType()).isEqualTo(DocumentTaskEventTypeEnum.RECOMMEND_STRATEGY.getCode());
+        }
+    }
+
+    // ============ 索引构建测试 ============
+
+    @Nested
+    @DisplayName("索引构建管道")
+    class IndexBuildPipeline {
+
+        @Test
+        @DisplayName("正常流程 → document.indexStatus=BUILD_SUCCESS, task=SUCCESS, plan=EXECUTED")
+        void shouldCompleteFullIndexBuildPipeline() {
+            // 准备：文档（已解析，有 parseSuccessTextPath）
+            Document doc = Document.builder()
+                    .id(1L)
+                    .documentName("test.pdf")
+                    .originalFileName("test.pdf")
+                    .fileType(1)
+                    .mediaType("text/plain")
+                    .fileSize(1024L)
+                    .storageType(1)
+                    .bucketName("test-bucket")
+                    .objectName("test/test.pdf")
+                    .parseStatus(DocumentParseStatusEnum.PARSE_SUCCESS.getCode())
+                    .strategyStatus(DocumentStrategyStatusEnum.RECOMMENDED.getCode())
+                    .indexStatus(DocumentIndexStatusEnum.WAIT_TO_BUILD.getCode())
+                    .parseSuccessTextPath("parsed-text/doc-1.txt")
+                    .build();
+            documentMapper.insert(doc);
+
+            // 准备：索引任务
+            DocumentTask task = DocumentTask.builder()
+                    .id(10L)
+                    .documentId(doc.getId())
+                    .taskType(DocumentTaskTypeEnum.BUILD_INDEX.getCode())
+                    .taskStatus(DocumentTaskStatusEnum.NEW.getCode())
+                    .currentStage(DocumentTaskStageEnum.STRATEGY_CONFIRM.getCode())
+                    .triggerSource(1)
+                    .retryCount(0)
+                    .strategyPlanId(100L)
+                    .build();
+            taskMapper.insert(task);
+
+            // 准备：已确认的方案 + 步骤
+            DocumentStrategyPlan plan = createPlan(100L, doc.getId());
+            createStep(110L, plan.getId(), doc.getId(), 1, "PARENT", 1, 1);
+            createStep(120L, plan.getId(), doc.getId(), 2, "CHILD", 3, 1);
+            createStep(130L, plan.getId(), doc.getId(), 3, "CHILD", 2, 3);
+
+            // Mock：下载解析文本
+            when(storageService.downloadObject("parsed-text/doc-1.txt"))
+                    .thenReturn("第一章\n内容段落A\n第二章\n内容段落B\n".getBytes());
+
+            // Mock：策略引擎产出 2 个 parent，各含 2 个 child
+            ChunkCandidate c1a = createChildCandidate("内容段落A-1");
+            ChunkCandidate c1b = createChildCandidate("内容段落A-2");
+            ChunkCandidate c2a = createChildCandidate("内容段落B-1");
+            ChunkCandidate c2b = createChildCandidate("内容段落B-2");
+            ParentBlockCandidate p1 = createParentCandidate("第一章", "第一章\n内容段落A\n", List.of(c1a, c1b));
+            ParentBlockCandidate p2 = createParentCandidate("第二章", "第二章\n内容段落B\n", List.of(c2a, c2b));
+            when(strategyService.buildParentBlocks(any(), any(), any(), anyString()))
+                    .thenReturn(List.of(p1, p2));
+
+            // Mock：向量化全部成功
+            when(vectorGateway.vectorize(any())).thenAnswer(inv -> {
+                List<DocumentChunk> chunks = inv.getArgument(0);
+                List<Long> allIds = chunks.stream().map(DocumentChunk::getId).toList();
+                return DocumentVectorizationResult.builder()
+                        .totalCount(chunks.size())
+                        .successCount(chunks.size())
+                        .failedCount(0)
+                        .successChunkIds(allIds)
+                        .failedChunkIds(List.of())
+                        .build();
+            });
+
+            // 执行
+            asyncProcessService.handleIndexBuild(doc.getId(), task.getId(), plan.getId());
+
+            // 验证 document
+            Document updatedDoc = documentMapper.selectById(doc.getId());
+            assertThat(updatedDoc.getIndexStatus()).isEqualTo(DocumentIndexStatusEnum.BUILD_SUCCESS.getCode());
+            assertThat(updatedDoc.getLatestIndexTaskId()).isEqualTo(task.getId());
+
+            // 验证 task
+            DocumentTask updatedTask = taskMapper.selectById(task.getId());
+            assertThat(updatedTask.getTaskStatus()).isEqualTo(DocumentTaskStatusEnum.SUCCESS.getCode());
+            assertThat(updatedTask.getCurrentStage()).isEqualTo(DocumentTaskStageEnum.STORE_COMPLETE.getCode());
+            assertThat(updatedTask.getFinishTime()).isNotNull();
+            assertThat(updatedTask.getCostMillis()).isNotNull().isPositive();
+            assertThat(updatedTask.getErrorCode()).isNull();
+
+            // 验证 plan → EXECUTED
+            DocumentStrategyPlan updatedPlan = strategyPlanMapper.selectById(plan.getId());
+            assertThat(updatedPlan.getPlanStatus()).isEqualTo(DocumentPlanStatusEnum.EXECUTED.getCode());
+
+            // 验证 steps → SUCCESS
+            List<DocumentStrategyStep> steps = strategyStepMapper.selectList(null);
+            assertThat(steps).hasSize(3);
+            assertThat(steps).allMatch(s ->
+                    s.getExecuteStatus().equals(DocumentStrategyExecuteStatusEnum.SUCCESS.getCode()));
+
+            // 验证 parentBlocks 持久化
+            List<DocumentParentBlock> parentBlocks = parentBlockMapper.selectList(null);
+            assertThat(parentBlocks).hasSize(2);
+            assertThat(parentBlocks).extracting(DocumentParentBlock::getParentNo).containsExactly(1, 2);
+            assertThat(parentBlocks).allMatch(pb -> pb.getDocumentId().equals(doc.getId()));
+            assertThat(parentBlocks).allMatch(pb -> pb.getTaskId().equals(task.getId()));
+
+            // 验证 chunks 持久化
+            List<DocumentChunk> chunks = chunkMapper.selectList(null);
+            assertThat(chunks).hasSize(4);
+            assertThat(chunks).allMatch(c -> c.getDocumentId().equals(doc.getId()));
+            assertThat(chunks).allMatch(c ->
+                    c.getVectorStatus().equals(DocumentVectorStatusEnum.VECTOR_SUCCESS.getCode()));
+
+            // 验证 taskLog 阶段流转: CHUNK_EXECUTE → CHUNK_POST_PROCESS → VECTORIZE → STORE_COMPLETE
+            List<DocumentTaskLog> logs = taskLogMapper.selectList(null);
+            assertThat(logs).hasSize(6); // 4×START/COMPLETE + 阶段2 COMPLETE + 阶段4 COMPLETE
+            assertThat(logs).anyMatch(l ->
+                    l.getStageType().equals(DocumentTaskStageEnum.CHUNK_EXECUTE.getCode())
+                            && l.getEventType().equals(DocumentTaskEventTypeEnum.START.getCode()));
+            assertThat(logs).anyMatch(l ->
+                    l.getStageType().equals(DocumentTaskStageEnum.CHUNK_POST_PROCESS.getCode())
+                            && l.getEventType().equals(DocumentTaskEventTypeEnum.COMPLETE.getCode()));
+            assertThat(logs).anyMatch(l ->
+                    l.getStageType().equals(DocumentTaskStageEnum.VECTORIZE.getCode())
+                            && l.getEventType().equals(DocumentTaskEventTypeEnum.COMPLETE.getCode()));
+            assertThat(logs).anyMatch(l ->
+                    l.getStageType().equals(DocumentTaskStageEnum.STORE_COMPLETE.getCode())
+                            && l.getEventType().equals(DocumentTaskEventTypeEnum.COMPLETE.getCode()));
+        }
+
+        @Test
+        @DisplayName("数据校验：document/task/plan 任一为 null → 静默返回")
+        void shouldReturnSilentlyWhenDataNotFound() {
+            Document doc = createDocument(1L, "test.pdf", 1);
+            // 不创建 task 和 plan
+
+            asyncProcessService.handleIndexBuild(doc.getId(), 999L, 999L);
+
+            // 不应有任何 taskLog
+            List<DocumentTaskLog> logs = taskLogMapper.selectList(null);
+            // 只有 setUp 清表，没有新写入
+            assertThat(logs).isEmpty();
+
+            // document 状态不应被修改
+            Document updated = documentMapper.selectById(doc.getId());
+            assertThat(updated.getIndexStatus()).isEqualTo(DocumentIndexStatusEnum.WAIT_TO_BUILD.getCode());
+        }
+
+        @Test
+        @DisplayName("isValidParentBlock 过滤：空文本候选被剔除")
+        void shouldFilterEmptyParentCandidates() {
+            Document doc = Document.builder()
+                    .id(1L)
+                    .documentName("empty-filter.pdf")
+                    .originalFileName("empty-filter.pdf")
+                    .fileType(1).mediaType("text/plain").fileSize(1024L)
+                    .storageType(1).bucketName("test-bucket").objectName("test/f.pdf")
+                    .parseStatus(DocumentParseStatusEnum.PARSE_SUCCESS.getCode())
+                    .indexStatus(DocumentIndexStatusEnum.WAIT_TO_BUILD.getCode())
+                    .parseSuccessTextPath("parsed-text/doc-1.txt")
+                    .build();
+            documentMapper.insert(doc);
+
+            DocumentTask task = DocumentTask.builder()
+                    .id(10L).documentId(doc.getId())
+                    .taskType(DocumentTaskTypeEnum.BUILD_INDEX.getCode())
+                    .taskStatus(DocumentTaskStatusEnum.NEW.getCode())
+                    .currentStage(DocumentTaskStageEnum.STRATEGY_CONFIRM.getCode())
+                    .triggerSource(1).retryCount(0).strategyPlanId(100L)
+                    .build();
+            taskMapper.insert(task);
+
+            DocumentStrategyPlan plan = createPlan(100L, doc.getId());
+            createStep(110L, plan.getId(), doc.getId(), 1, "PARENT", 1, 1);
+            createStep(120L, plan.getId(), doc.getId(), 2, "CHILD", 3, 1);
+
+            when(storageService.downloadObject(anyString())).thenReturn("文本".getBytes());
+
+            // 候选列表混入空文本和 null
+            ParentBlockCandidate valid = createParentCandidate("第一章", "有效内容",
+                    List.of(createChildCandidate("child1")));
+            ParentBlockCandidate emptyText = createParentCandidate(null, "",
+                    List.of());
+            ParentBlockCandidate nullText = createParentCandidate(null, null,
+                    List.of());
+            when(strategyService.buildParentBlocks(any(), any(), any(), anyString()))
+                    .thenReturn(List.of(valid, emptyText, nullText));
+
+            when(vectorGateway.vectorize(any())).thenAnswer(inv -> {
+                List<DocumentChunk> chunks = inv.getArgument(0);
+                List<Long> ids = chunks.stream().map(DocumentChunk::getId).toList();
+                return DocumentVectorizationResult.builder()
+                        .totalCount(chunks.size()).successCount(chunks.size()).failedCount(0)
+                        .successChunkIds(ids).failedChunkIds(List.of()).build();
+            });
+
+            asyncProcessService.handleIndexBuild(doc.getId(), task.getId(), plan.getId());
+
+            // 只有 1 个有效 parent + 1 个 child 被持久化
+            List<DocumentParentBlock> parentBlocks = parentBlockMapper.selectList(null);
+            assertThat(parentBlocks).hasSize(1);
+            assertThat(parentBlocks.get(0).getParentText()).isEqualTo("有效内容");
+
+            List<DocumentChunk> chunks = chunkMapper.selectList(null);
+            assertThat(chunks).hasSize(1);
+        }
+
+        @Test
+        @DisplayName("策略执行异常 → document=BUILD_FAIL, chunk.markVectorFailedByTaskId, steps=FAILED")
+        void shouldHandleStrategyExecutionException() {
+            Document doc = Document.builder()
+                    .id(1L)
+                    .documentName("fail.pdf")
+                    .originalFileName("fail.pdf")
+                    .fileType(1).mediaType("text/plain").fileSize(1024L)
+                    .storageType(1).bucketName("test-bucket").objectName("test/fail.pdf")
+                    .parseStatus(DocumentParseStatusEnum.PARSE_SUCCESS.getCode())
+                    .indexStatus(DocumentIndexStatusEnum.WAIT_TO_BUILD.getCode())
+                    .parseSuccessTextPath("parsed-text/doc-1.txt")
+                    .build();
+            documentMapper.insert(doc);
+
+            DocumentTask task = DocumentTask.builder()
+                    .id(10L).documentId(doc.getId())
+                    .taskType(DocumentTaskTypeEnum.BUILD_INDEX.getCode())
+                    .taskStatus(DocumentTaskStatusEnum.NEW.getCode())
+                    .currentStage(DocumentTaskStageEnum.STRATEGY_CONFIRM.getCode())
+                    .triggerSource(1).retryCount(0).strategyPlanId(100L)
+                    .build();
+            taskMapper.insert(task);
+
+            DocumentStrategyPlan plan = createPlan(100L, doc.getId());
+            createStep(110L, plan.getId(), doc.getId(), 1, "PARENT", 1, 1);
+
+            when(storageService.downloadObject(anyString())).thenReturn("文本".getBytes());
+            when(strategyService.buildParentBlocks(any(), any(), any(), anyString()))
+                    .thenThrow(new RuntimeException("切块执行失败: 文本无法解析"));
+
+            asyncProcessService.handleIndexBuild(doc.getId(), task.getId(), plan.getId());
+
+            // 验证 document → BUILD_FAIL
+            Document updatedDoc = documentMapper.selectById(doc.getId());
+            assertThat(updatedDoc.getIndexStatus()).isEqualTo(DocumentIndexStatusEnum.BUILD_FAIL.getCode());
+
+            // 验证 task → FAILED
+            DocumentTask updatedTask = taskMapper.selectById(task.getId());
+            assertThat(updatedTask.getTaskStatus()).isEqualTo(DocumentTaskStatusEnum.FAILED.getCode());
+            assertThat(updatedTask.getErrorCode()).isEqualTo("20008");
+            assertThat(updatedTask.getErrorMsg()).contains("切块执行失败");
+
+            // 验证 steps → FAILED
+            List<DocumentStrategyStep> steps = strategyStepMapper.selectList(null);
+            assertThat(steps).hasSize(1);
+            assertThat(steps.get(0).getExecuteStatus())
+                    .isEqualTo(DocumentStrategyExecuteStatusEnum.FAILED.getCode());
+
+            // 验证 taskLog 有 FAILED 事件
+            List<DocumentTaskLog> logs = taskLogMapper.selectList(null);
+            assertThat(logs).anyMatch(l ->
+                    l.getEventType().equals(DocumentTaskEventTypeEnum.FAILED.getCode()));
+        }
+
+        @Test
+        @DisplayName("向量化部分失败 → 成功/失败 chunk 分别标记正确状态")
+        void shouldHandlePartialVectorizationFailure() {
+            Document doc = Document.builder()
+                    .id(1L)
+                    .documentName("partial-fail.pdf")
+                    .originalFileName("partial-fail.pdf")
+                    .fileType(1).mediaType("text/plain").fileSize(1024L)
+                    .storageType(1).bucketName("test-bucket").objectName("test/pf.pdf")
+                    .parseStatus(DocumentParseStatusEnum.PARSE_SUCCESS.getCode())
+                    .indexStatus(DocumentIndexStatusEnum.WAIT_TO_BUILD.getCode())
+                    .parseSuccessTextPath("parsed-text/doc-1.txt")
+                    .build();
+            documentMapper.insert(doc);
+
+            DocumentTask task = DocumentTask.builder()
+                    .id(10L).documentId(doc.getId())
+                    .taskType(DocumentTaskTypeEnum.BUILD_INDEX.getCode())
+                    .taskStatus(DocumentTaskStatusEnum.NEW.getCode())
+                    .currentStage(DocumentTaskStageEnum.STRATEGY_CONFIRM.getCode())
+                    .triggerSource(1).retryCount(0).strategyPlanId(100L)
+                    .build();
+            taskMapper.insert(task);
+
+            DocumentStrategyPlan plan = createPlan(100L, doc.getId());
+            createStep(110L, plan.getId(), doc.getId(), 1, "PARENT", 1, 1);
+            createStep(120L, plan.getId(), doc.getId(), 2, "CHILD", 3, 1);
+
+            when(storageService.downloadObject(anyString())).thenReturn("文本".getBytes());
+
+            ChunkCandidate c1 = createChildCandidate("chunk-1");
+            ChunkCandidate c2 = createChildCandidate("chunk-2");
+            ParentBlockCandidate p1 = createParentCandidate("第一章", "第一章内容", List.of(c1, c2));
+            when(strategyService.buildParentBlocks(any(), any(), any(), anyString()))
+                    .thenReturn(List.of(p1));
+
+            // Mock：第一个成功，第二个失败
+            when(vectorGateway.vectorize(any())).thenAnswer(inv -> {
+                List<DocumentChunk> chunks = inv.getArgument(0);
+                // uidGenerator 分配: parentBlock=1020, chunk1=1030, chunk2=1040
+                List<Long> allIds = chunks.stream().map(DocumentChunk::getId).toList();
+                return DocumentVectorizationResult.builder()
+                        .totalCount(chunks.size())
+                        .successCount(1)
+                        .failedCount(1)
+                        .successChunkIds(List.of(allIds.get(0)))
+                        .failedChunkIds(List.of(allIds.get(1)))
+                        .build();
+            });
+
+            asyncProcessService.handleIndexBuild(doc.getId(), task.getId(), plan.getId());
+
+            // 验证 chunk 状态
+            List<DocumentChunk> chunks = chunkMapper.selectList(null);
+            assertThat(chunks).hasSize(2);
+            assertThat(chunks).anyMatch(c ->
+                    c.getVectorStatus().equals(DocumentVectorStatusEnum.VECTOR_SUCCESS.getCode()));
+            assertThat(chunks).anyMatch(c ->
+                    c.getVectorStatus().equals(DocumentVectorStatusEnum.VECTOR_FAILED.getCode()));
+
+            // 整体流程应成功（部分失败不阻塞管道）
+            Document updatedDoc = documentMapper.selectById(doc.getId());
+            assertThat(updatedDoc.getIndexStatus()).isEqualTo(DocumentIndexStatusEnum.BUILD_SUCCESS.getCode());
+        }
+
+        @Test
+        @DisplayName("task.currentStage 依次经过 CHUNK_EXECUTE → POST_PROCESS → VECTORIZE → STORE_COMPLETE")
+        void shouldTransitionThroughCorrectStages() {
+            Document doc = Document.builder()
+                    .id(1L)
+                    .documentName("stages.pdf")
+                    .originalFileName("stages.pdf")
+                    .fileType(1).mediaType("text/plain").fileSize(1024L)
+                    .storageType(1).bucketName("test-bucket").objectName("test/stages.pdf")
+                    .parseStatus(DocumentParseStatusEnum.PARSE_SUCCESS.getCode())
+                    .indexStatus(DocumentIndexStatusEnum.WAIT_TO_BUILD.getCode())
+                    .parseSuccessTextPath("parsed-text/doc-1.txt")
+                    .build();
+            documentMapper.insert(doc);
+
+            DocumentTask task = DocumentTask.builder()
+                    .id(10L).documentId(doc.getId())
+                    .taskType(DocumentTaskTypeEnum.BUILD_INDEX.getCode())
+                    .taskStatus(DocumentTaskStatusEnum.NEW.getCode())
+                    .currentStage(DocumentTaskStageEnum.STRATEGY_CONFIRM.getCode())
+                    .triggerSource(1).retryCount(0).strategyPlanId(100L)
+                    .build();
+            taskMapper.insert(task);
+
+            DocumentStrategyPlan plan = createPlan(100L, doc.getId());
+            createStep(110L, plan.getId(), doc.getId(), 1, "PARENT", 1, 1);
+            createStep(120L, plan.getId(), doc.getId(), 2, "CHILD", 3, 1);
+
+            when(storageService.downloadObject(anyString())).thenReturn("文本".getBytes());
+
+            ChunkCandidate c1 = createChildCandidate("child-1");
+            ParentBlockCandidate p1 = createParentCandidate("第一章", "第一章内容", List.of(c1));
+            when(strategyService.buildParentBlocks(any(), any(), any(), anyString()))
+                    .thenReturn(List.of(p1));
+
+            when(vectorGateway.vectorize(any())).thenAnswer(inv -> {
+                List<DocumentChunk> chunks = inv.getArgument(0);
+                List<Long> ids = chunks.stream().map(DocumentChunk::getId).toList();
+                return DocumentVectorizationResult.builder()
+                        .totalCount(chunks.size()).successCount(chunks.size()).failedCount(0)
+                        .successChunkIds(ids).failedChunkIds(List.of()).build();
+            });
+
+            asyncProcessService.handleIndexBuild(doc.getId(), task.getId(), plan.getId());
+
+            // 终态 stage = STORE_COMPLETE
+            DocumentTask updatedTask = taskMapper.selectById(task.getId());
+            assertThat(updatedTask.getCurrentStage()).isEqualTo(DocumentTaskStageEnum.STORE_COMPLETE.getCode());
+
+            // taskLog 覆盖了四个阶段
+            List<DocumentTaskLog> logs = taskLogMapper.selectList(null);
+            assertThat(logs).extracting(DocumentTaskLog::getStageType)
+                    .contains(DocumentTaskStageEnum.CHUNK_EXECUTE.getCode(),
+                            DocumentTaskStageEnum.CHUNK_POST_PROCESS.getCode(),
+                            DocumentTaskStageEnum.VECTORIZE.getCode(),
+                            DocumentTaskStageEnum.STORE_COMPLETE.getCode());
         }
     }
 }

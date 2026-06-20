@@ -4,7 +4,7 @@
 
 ### 项目背景
 
-reuben-agent 当前处于"以自己的风格跟敲 super-agent"的阶段。文档模块已完成：
+reuben-agent 当前处于"以自己的风格跟敲同目录的super-agent"的阶段。文档模块已完成：
 
 - 文件上传 → Tika 解析 → 结构树提取（4-Stage Pipeline）
 - 文档画像生成
@@ -322,71 +322,37 @@ Phase 9 (集成 & 验证) ──────────────────
 
 ### 7.1 `IDocumentAsyncProcessService` 接口扩展
 
-- [ ] 新增方法签名：
+- [x] 新增方法签名：
   ```java
   void handleIndexBuild(Long documentId, Long taskId, Long planId);
   ```
 
 ### 7.2 `DocumentAsyncProcessServiceImpl.handleIndexBuild()` 实现
 
-四阶段管线，结构与 `handleParseStrategyRoute` 风格一致：
-
-```
-// 阶段 0：数据校验
-- select document / task / plan by ID
-- 任一为 null → log.warn + return
-
-// 阶段 1：CHUNK_EXECUTE
-- document.indexStatus = BUILDING
-- task.taskStatus = RUNNING, task.currentStage = CHUNK_EXECUTE
-- plan steps executeStatus = EXECUTING
-- storageService.downloadText(document.parseTextPath)
-- strategyService.buildParentBlocks(document, plan, steps, parsedText)
-- plan steps executeStatus = SUCCESS
-
-// 阶段 2：CHUNK_POST_PROCESS
-- task.currentStage = CHUNK_POST_PROCESS
-- filter: isValidParentBlock() (非null, text非空, 有有效child)
-- buildParentChildEntities() → ParentChildEntityBundle
-- batch insert parentBlocks + chunks
-
-// 阶段 3：VECTORIZE
-- task.currentStage = VECTORIZE
-- DocumentVectorizationResult result = vectorGateway.vectorize(chunks)
-- 根据 result 更新各 chunk 的 vectorStatus（成功→VECTOR_SUCCESS, 失败→VECTOR_FAILED）
-- optional: keywordSearchGateway.indexChunks(chunks)
-
-// 阶段 4：STORE_COMPLETE
-- task.currentStage = STORE_COMPLETE
-- plan.planStatus = EXECUTED
-- document.indexStatus = BUILD_SUCCESS
-- document.lastIndexTaskId = taskId
-- finishTaskSuccess()
-
-// catch block:
-- document.indexStatus = BUILD_FAILED
-- chunkMapper.markVectorFailedByTaskId(taskId)  // 仅标记 WAIT_VECTOR 的 chunk（优化 #4）
-- plan steps executeStatus = FAILED
-- failTask() + taskLog
-```
+- [x] 数据校验：select document / task / plan，任一为 null → log.warn + return
+- [x] 阶段 1 `CHUNK_EXECUTE`：更新 document/task/plan 状态 → `storageService.downloadText()` → `strategyService.buildParentBlocks()`
+- [x] 阶段 2 `CHUNK_POST_PROCESS`：`isValidParentBlock()` 过滤 → `buildParentChildEntities()` → 批量 insert parentBlocks + chunks
+- [x] 阶段 3 `VECTORIZE`：`vectorGateway.vectorize()` → 根据 `DocumentVectorizationResult` 更新各 chunk 状态 → `keywordSearchGateway.indexChunks()`
+- [x] 阶段 4 `STORE_COMPLETE`：更新 plan=EXECUTED, document=BUILD_SUCCESS, task=SUCCESS
+- [x] catch block：document=BUILD_FAILED, `chunkMapper.markVectorFailedByTaskId()`, plan steps=FAILED, failTask + taskLog
 
 ### 7.3 `buildParentChildEntities` 私有方法
 
-- [ ] 使用 `@Builder` 构建 `DocumentParentBlock` 和 `DocumentChunk` 实体（优化 #6）
-- [ ] 雪花 ID 分配（`uidGenerator.getUid()`）
-- [ ] `charCount` = `text.length()`
-- [ ] 集成 TikToken（`com.knuddels:jtokkit`）实际计算 `tokenCount`（优化 #5）——杜绝 super-agent 设假值 0 的问题
-- [ ] 全局 `chunkNo` 跨所有 parent 递增
+- [x] 使用 `@Builder` 构建 `DocumentParentBlock` 和 `DocumentChunk` 实体（优化 #6）
+- [x] 雪花 ID 分配（`uidGenerator.getUid()`）
+- [x] `charCount` = `text.length()`
+- [x] 集成 TikToken（`com.knuddels:jtokkit`）实际计算 `tokenCount`（优化 #5）——杜绝 super-agent 设假值 0 的问题
+- [x] 全局 `chunkNo` 跨所有 parent 递增
 
 ### 7.4 `ParentChildEntityBundle` 内部 record
 
-- [ ] 定义于 `DocumentAsyncProcessServiceImpl` 文件底部（package-private）
-- [ ] `record ParentChildEntityBundle(List<DocumentParentBlock> parentBlocks, List<DocumentChunk> childChunks) {}`
+- [x] 定义于 `DocumentAsyncProcessServiceImpl` 文件底部（package-private）
+- [x] `record ParentChildEntityBundle(List<DocumentParentBlock> parentBlocks, List<DocumentChunk> childChunks) {}`
 
 ### 7.5 `isValidParentBlock` 辅助方法
 
-- [ ] 提取 stream filter 为命名方法（优化 #7）
-- [ ] `private static boolean isValidParentBlock(ParentBlockCandidate candidate)`
+- [x] 提取 stream filter 为命名方法（优化 #7）
+- [x] `private static boolean isValidParentBlock(ParentBlockCandidate candidate)`
 
 ---
 

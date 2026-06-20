@@ -107,7 +107,7 @@ public class DocumentProperties {
         /** 向量化批量大小 */
         private Integer batchSize = 10;
         /** embedding 模型名称 */
-        private String embeddingModel = "text-embedding-3-small";
+        private String embeddingModel = "bge-m3";
     }
 
     /**
@@ -115,7 +115,7 @@ public class DocumentProperties {
      */
     @Data
     public static class Embedding {
-        /** 向量维度 */
-        private Integer dimension = 1536;
+        /** 向量维度 (bge-m3 = 1024) */
+        private Integer dimension = 1024;
     }
 }

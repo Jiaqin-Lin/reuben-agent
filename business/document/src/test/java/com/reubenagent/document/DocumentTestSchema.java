@@ -14,6 +14,8 @@ public final class DocumentTestSchema {
 
     /** 删除所有测试表（先子后父，避免外键约束冲突） */
     public static void dropTables(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_chunk");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_parent_block");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_profile");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_strategy_step");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_strategy_plan");
@@ -203,6 +205,63 @@ public final class DocumentTestSchema {
             """);
     }
 
+    /** 创建 document_parent_block 表 */
+    public static void createDocumentParentBlockTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_document_parent_block (
+                id                  BIGINT        NOT NULL PRIMARY KEY,
+                document_id         BIGINT        NOT NULL,
+                task_id             BIGINT        NOT NULL,
+                plan_id             BIGINT        NOT NULL,
+                parent_no           INT           DEFAULT NULL,
+                source_type         TINYINT       DEFAULT 1,
+                section_path        VARCHAR(500)  DEFAULT NULL,
+                structure_node_id   BIGINT        DEFAULT NULL,
+                structure_node_type TINYINT       DEFAULT NULL,
+                canonical_path      VARCHAR(500)  DEFAULT NULL,
+                item_index          INT           DEFAULT NULL,
+                parent_text         MEDIUMTEXT    DEFAULT NULL,
+                char_count          INT           DEFAULT 0,
+                token_count         INT           DEFAULT 0,
+                child_count         INT           DEFAULT 0,
+                start_chunk_no      INT           DEFAULT NULL,
+                end_chunk_no        INT           DEFAULT NULL,
+                create_time         DATETIME      DEFAULT NULL,
+                update_time         DATETIME      DEFAULT NULL,
+                is_deleted          TINYINT       DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
+    /** 创建 document_chunk 表 */
+    public static void createDocumentChunkTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_document_chunk (
+                id                  BIGINT        NOT NULL PRIMARY KEY,
+                document_id         BIGINT        NOT NULL,
+                task_id             BIGINT        NOT NULL,
+                plan_id             BIGINT        NOT NULL,
+                parent_block_id     BIGINT        DEFAULT NULL,
+                chunk_no            INT           DEFAULT NULL,
+                source_type         TINYINT       DEFAULT 1,
+                section_path        VARCHAR(500)  DEFAULT NULL,
+                structure_node_id   BIGINT        DEFAULT NULL,
+                structure_node_type TINYINT       DEFAULT NULL,
+                canonical_path      VARCHAR(500)  DEFAULT NULL,
+                item_index          INT           DEFAULT NULL,
+                chunk_text          MEDIUMTEXT    DEFAULT NULL,
+                char_count          INT           DEFAULT 0,
+                token_count         INT           DEFAULT 0,
+                vector_status       TINYINT       DEFAULT 1,
+                vector_store_type   TINYINT       DEFAULT NULL,
+                vector_id           VARCHAR(200)  DEFAULT NULL,
+                create_time         DATETIME      DEFAULT NULL,
+                update_time         DATETIME      DEFAULT NULL,
+                is_deleted          TINYINT       DEFAULT 0
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
     /** 一步创建全部表 */
     public static void createAllTables(JdbcTemplate jdbcTemplate) {
         createDocumentTable(jdbcTemplate);
@@ -212,5 +271,7 @@ public final class DocumentTestSchema {
         createDocumentProfileTable(jdbcTemplate);
         createDocumentStrategyPlanTable(jdbcTemplate);
         createDocumentStrategyStepTable(jdbcTemplate);
+        createDocumentParentBlockTable(jdbcTemplate);
+        createDocumentChunkTable(jdbcTemplate);
     }
 }
