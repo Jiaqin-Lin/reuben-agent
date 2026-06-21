@@ -20,9 +20,12 @@ import com.reubenagent.document.model.mq.DocumentParseRouteMessage;
 import com.reubenagent.document.mq.DocumentKafkaProducer;
 import com.reubenagent.document.service.IDocumentManageService;
 import com.reubenagent.document.service.IDocumentStorageService;
+import com.reubenagent.document.vo.DocumentDetailVo;
 import com.reubenagent.document.vo.DocumentStrategyConfirmVo;
+import com.reubenagent.document.vo.DocumentStrategyPlanVo;
 import com.reubenagent.document.vo.DocumentUploadVo;
 import com.reubenagent.framework.uid.UidGenerator;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -32,7 +35,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 文档管理服务实现 —— 上传文档到 MinIO 并创建解析-策略-索引异步任务。
@@ -302,5 +307,51 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
      */
     private Integer resolveOperatorType(Long operatorId) {
         return operatorId == null ? DocumentOperatorTypeEnum.SYSTEM.getCode() : DocumentOperatorTypeEnum.USER.getCode();
+    }
+
+    // =====================================================================
+    // 查询方法
+    // =====================================================================
+
+    @Override
+    public DocumentDetailVo getDocument(Long documentId) {
+        Document doc = documentMapper.selectById(documentId);
+        if (doc == null) {
+            throw new DocumentException(DocumentManageCode.DOCUMENT_NOT_FOUND,
+                    "documentId=" + documentId);
+        }
+        return DocumentDetailVo.builder()
+                .documentId(doc.getId())
+                .documentName(doc.getDocumentName())
+                .originalFileName(doc.getOriginalFileName())
+                .fileType(doc.getFileType())
+                .fileSize(doc.getFileSize())
+                .parseStatus(doc.getParseStatus())
+                .strategyStatus(doc.getStrategyStatus())
+                .indexStatus(doc.getIndexStatus())
+                .charCount(doc.getCharCount())
+                .structureLevel(doc.getStructureLevel())
+                .contentQualityLevel(doc.getContentQualityLevel())
+                .build();
+    }
+
+    @Override
+    public List<DocumentStrategyPlanVo> getPlans(Long documentId) {
+        List<DocumentStrategyPlan> plans = strategyPlanMapper.selectList(
+                new LambdaQueryWrapper<DocumentStrategyPlan>()
+                        .eq(DocumentStrategyPlan::getDocumentId, documentId)
+                        .orderByDesc(DocumentStrategyPlan::getCreateTime));
+        return plans.stream()
+                .map(p -> DocumentStrategyPlanVo.builder()
+                        .planId(p.getId())
+                        .documentId(p.getDocumentId())
+                        .planVersion(p.getPlanVersion())
+                        .planSource(p.getPlanSource())
+                        .planStatus(p.getPlanStatus())
+                        .strategyCount(p.getStrategyCount())
+                        .strategySnapshot(p.getStrategySnapshot())
+                        .recommendReason(p.getRecommendReason())
+                        .build())
+                .collect(Collectors.toList());
     }
 }

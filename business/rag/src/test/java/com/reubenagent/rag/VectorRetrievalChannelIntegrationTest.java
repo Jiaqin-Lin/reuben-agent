@@ -94,7 +94,7 @@ class VectorRetrievalChannelIntegrationTest {
     void cleanup() {
         String tableName = ragProperties.getPgvector().getTableName();
         pgVectorJdbcTemplate.update(
-                "DELETE FROM " + tableName + " WHERE document_id >= 9900000000000000000");
+                "DELETE FROM " + tableName + " WHERE document_id >= 9000000000000000000");
     }
 
     // =====================================================================

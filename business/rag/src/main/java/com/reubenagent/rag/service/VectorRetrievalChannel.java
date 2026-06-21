@@ -2,7 +2,6 @@ package com.reubenagent.rag.service;
 
 import com.reubenagent.rag.config.RagProperties;
 import com.reubenagent.rag.model.RetrievalResult;
-import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.beans.factory.ObjectProvider;
@@ -27,15 +26,22 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@AllArgsConstructor
 public class VectorRetrievalChannel {
 
-    @Qualifier("ragPgVectorJdbcTemplate")
     private final JdbcTemplate pgVectorJdbcTemplate;
 
     private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
 
     private final RagProperties ragProperties;
+
+    public VectorRetrievalChannel(
+            @Qualifier("ragPgVectorJdbcTemplate") JdbcTemplate pgVectorJdbcTemplate,
+            ObjectProvider<EmbeddingModel> embeddingModelProvider,
+            RagProperties ragProperties) {
+        this.pgVectorJdbcTemplate = pgVectorJdbcTemplate;
+        this.embeddingModelProvider = embeddingModelProvider;
+        this.ragProperties = ragProperties;
+    }
 
     // 阶段 1：检索入口
     public List<RetrievalResult> retrieve(String query, int topK, Map<String, String> filters) {

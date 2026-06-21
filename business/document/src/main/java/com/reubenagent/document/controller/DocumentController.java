@@ -4,17 +4,24 @@ import com.reubenagent.common.dto.ApiResponse;
 import com.reubenagent.document.dto.DocumentStrategyConfirmDto;
 import com.reubenagent.document.dto.DocumentUploadDto;
 import com.reubenagent.document.service.IDocumentManageService;
+import com.reubenagent.document.vo.DocumentDetailVo;
 import com.reubenagent.document.vo.DocumentStrategyConfirmVo;
+import com.reubenagent.document.vo.DocumentStrategyPlanVo;
 import com.reubenagent.document.vo.DocumentUploadVo;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.AllArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 /**
  * 文档管理 REST 接口 —— 提供文档上传、策略确认等入口。
@@ -39,6 +46,24 @@ public class DocumentController {
 
         return ApiResponse.ok(documentManageService.upload(file,
                 documentUploadDto == null ? new DocumentUploadDto() : documentUploadDto));
+    }
+
+    /**
+     * 查询文档详情。
+     */
+    @Operation(summary = "查询文档详情")
+    @GetMapping("/{id}")
+    public ApiResponse<DocumentDetailVo> getDocument(@PathVariable("id") Long id) {
+        return ApiResponse.ok(documentManageService.getDocument(id));
+    }
+
+    /**
+     * 获取文档的策略方案列表。
+     */
+    @Operation(summary = "获取策略方案列表")
+    @GetMapping("/strategy/plan")
+    public ApiResponse<List<DocumentStrategyPlanVo>> getPlans(@RequestParam Long documentId) {
+        return ApiResponse.ok(documentManageService.getPlans(documentId));
     }
 
     /**

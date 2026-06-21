@@ -6,9 +6,7 @@ import com.reubenagent.document.model.mq.DocumentParseRouteMessage;
 import com.reubenagent.document.service.IDocumentAsyncProcessService;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 /**
@@ -23,7 +21,6 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @AllArgsConstructor
 @Component
-@ConditionalOnBean(KafkaTemplate.class)
 public class DocumentKafkaConsumer {
 
     private final IDocumentAsyncProcessService asyncProcessService;

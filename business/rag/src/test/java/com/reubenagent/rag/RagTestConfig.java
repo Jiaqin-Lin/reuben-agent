@@ -22,4 +22,12 @@ public final class RagTestConfig {
     @SpringBootApplication(scanBasePackages = "com.reubenagent.rag")
     public static class TestApp {
     }
+
+    /**
+     * Web 集成测试专用 Spring Boot 应用，额外扫描 {@code com.reubenagent.common}
+     * 以激活 {@code GlobalExceptionHandler}。
+     */
+    @SpringBootApplication(scanBasePackages = {"com.reubenagent.rag", "com.reubenagent.common"})
+    public static class WebTestApp {
+    }
 }

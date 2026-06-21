@@ -41,7 +41,6 @@ import java.util.Map;
  */
 @Slf4j
 @Service
-@AllArgsConstructor
 public class DefaultDocumentVectorGateway implements IDocumentVectorGateway {
 
     private static final String UPSERT_SQL_TEMPLATE = """
@@ -67,12 +66,20 @@ public class DefaultDocumentVectorGateway implements IDocumentVectorGateway {
 
     private static final String DELETE_BY_DOCUMENT_SQL = "DELETE FROM %s WHERE document_id = ?";
 
-    @Qualifier("documentPgVectorJdbcTemplate")
     private final JdbcTemplate pgVectorJdbcTemplate;
 
     private final ObjectProvider<EmbeddingModel> embeddingModelProvider;
 
     private final DocumentProperties documentProperties;
+
+    public DefaultDocumentVectorGateway(
+            @Qualifier("documentPgVectorJdbcTemplate") JdbcTemplate pgVectorJdbcTemplate,
+            ObjectProvider<EmbeddingModel> embeddingModelProvider,
+            DocumentProperties documentProperties) {
+        this.pgVectorJdbcTemplate = pgVectorJdbcTemplate;
+        this.embeddingModelProvider = embeddingModelProvider;
+        this.documentProperties = documentProperties;
+    }
 
     @Override
     public DocumentVectorizationResult vectorize(List<DocumentChunk> chunks) {

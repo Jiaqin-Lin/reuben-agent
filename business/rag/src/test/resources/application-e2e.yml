@@ -1,0 +1,114 @@
+# =============================================================================
+# RAG E2E 全链路集成测试 — 启用所有中间件（Kafka 真实异步管线）
+# 前置: docker compose up -d
+# =============================================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3307/reuben_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root123
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+
+  ai:
+    deepseek:
+      api-key: fake-e2e-key
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        enabled: false
+      embedding:
+        model: bge-m3
+
+  # 只排除 Neo4j（不需要）和 ES 自动配置（手动创建 ES bean）
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: is_deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    com.reubenagent: DEBUG
+    org.springframework.kafka: INFO
+    org.apache.kafka: WARN
+
+reuben:
+  document:
+    minio:
+      endpoint: http://127.0.0.1:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket-name: reuben-agent-document
+      object-prefix: rag/document
+    pgvector:
+      host: 127.0.0.1
+      port: 5432
+      database: reuben_agent_pgvector
+      username: reuben
+      password: reuben123
+      table-name: public.reuben_agent_document_embedding
+      batch-size: 10
+      embedding-model: bge-m3
+    embedding:
+      dimension: 1024
+    kafka:
+      parse-topic: reuben-agent-document-parse-route
+      index-topic: reuben-agent-document-index-build
+      group-id: reuben-agent-document-e2e
+      auto-create-topics: true
+    strategy:
+      recursive-overlap-chars: 200
+      semantic-similarity-threshold: 0.7
+      llm-max-input-chars: 8000
+    # 禁用 LLM 消歧（E2E 测试环境没有真实 LLM）
+    structure-parsing:
+      llm-disambiguation-enabled: false
+    elasticsearch:
+      index-name: reuben_document_chunk
+
+  rag:
+    retrieval:
+      vector-top-k: 8
+      keyword-top-k: 8
+      final-top-k: 5
+      rrf-k: 60
+      channel-timeout-ms: 5000
+    pgvector:
+      host: 127.0.0.1
+      port: 5432
+      database: reuben_agent_pgvector
+      username: reuben
+      password: reuben123
+      table-name: public.reuben_agent_document_embedding
+      pool-name: RagPgVectorE2EPool
+    elasticsearch:
+      index-name: reuben_document_chunk
+    embedding:
+      model: bge-m3
+      dimension: 1024

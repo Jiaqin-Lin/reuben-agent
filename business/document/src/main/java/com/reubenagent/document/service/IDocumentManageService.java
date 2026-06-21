@@ -2,13 +2,27 @@ package com.reubenagent.document.service;
 
 import com.reubenagent.document.dto.DocumentStrategyConfirmDto;
 import com.reubenagent.document.dto.DocumentUploadDto;
+import com.reubenagent.document.vo.DocumentDetailVo;
 import com.reubenagent.document.vo.DocumentStrategyConfirmVo;
+import com.reubenagent.document.vo.DocumentStrategyPlanVo;
 import com.reubenagent.document.vo.DocumentUploadVo;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 public interface IDocumentManageService {
 
     DocumentUploadVo upload(MultipartFile file, DocumentUploadDto documentUploadDto);
+
+    /**
+     * 查询文档详情。
+     */
+    DocumentDetailVo getDocument(Long documentId);
+
+    /**
+     * 获取文档的策略方案列表。
+     */
+    List<DocumentStrategyPlanVo> getPlans(Long documentId);
 
     /**
      * 确认策略方案并触发索引构建。

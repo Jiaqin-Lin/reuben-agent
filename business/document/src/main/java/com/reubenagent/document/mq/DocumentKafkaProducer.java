@@ -7,7 +7,6 @@ import com.reubenagent.document.config.DocumentProperties;
 import com.reubenagent.document.model.mq.DocumentIndexBuildMessage;
 import com.reubenagent.document.model.mq.DocumentParseRouteMessage;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -23,7 +22,6 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@ConditionalOnBean(KafkaTemplate.class)
 public class DocumentKafkaProducer {
 
     private final KafkaTemplate<String, String> kafkaTemplate;

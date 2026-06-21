@@ -25,6 +25,7 @@ public enum DocumentManageCode implements BaseEnum {
     KAFKA_SEND_FAILED(20010, "Kafka消息发送失败"),
     PLAN_NOT_FOUND(20011, "策略方案不存在"),
     PLAN_STATUS_INVALID(20012, "策略方案状态不允许操作"),
+    DOCUMENT_NOT_FOUND(20013, "文档不存在"),
     ;
 
     @Getter

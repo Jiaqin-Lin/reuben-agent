@@ -11,6 +11,8 @@ spring:
   # AI — 本地开发用 fake key，生产环境通过环境变量覆盖
   # ---------------------------------------------------------------------------
   ai:
+    openai:
+      api-key: fake-dev-key
     deepseek:
       api-key: fake-dev-key
     ollama:
@@ -23,7 +25,7 @@ spring:
   # ---------------------------------------------------------------------------
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/reuben_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    url: jdbc:mysql://127.0.0.1:3307/reuben_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
     password: root123
 
@@ -65,6 +67,16 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
+
+  # ---------------------------------------------------------------------------
+  # 排除不需要的自动配置（DeepSeek 依赖传递了 OpenAI，但我们不使用）
+  # ---------------------------------------------------------------------------
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
 
 # =============================================================================
 # reuben-agent 业务模块配置

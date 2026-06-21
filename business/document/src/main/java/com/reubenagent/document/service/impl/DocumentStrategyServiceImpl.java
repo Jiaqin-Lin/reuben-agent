@@ -22,12 +22,12 @@ import com.reubenagent.document.model.ParentBlockCandidate;
 import com.reubenagent.document.service.IDocumentStrategyService;
 import com.reubenagent.document.service.IDocumentStructureNodeService;
 import com.reubenagent.document.support.PromptTemplateService;
-import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -48,7 +48,6 @@ import java.util.stream.Collectors;
  * @since 2026-06-20
  */
 @Slf4j
-@AllArgsConstructor
 @Service
 public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
 
@@ -56,6 +55,17 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
     private final IDocumentStructureNodeService structureNodeService;
     private final PromptTemplateService promptTemplateService;
     private final ChatModel chatModel;
+
+    public DocumentStrategyServiceImpl(
+            DocumentProperties documentProperties,
+            IDocumentStructureNodeService structureNodeService,
+            PromptTemplateService promptTemplateService,
+            @Qualifier("deepSeekChatModel") ChatModel chatModel) {
+        this.documentProperties = documentProperties;
+        this.structureNodeService = structureNodeService;
+        this.promptTemplateService = promptTemplateService;
+        this.chatModel = chatModel;
+    }
 
     /** 预编译正则：句子边界（标点后可选的空白符） */
     private static final Pattern SENTENCE_SPLIT = Pattern.compile("(?<=[。.!?！？])\\s*");
