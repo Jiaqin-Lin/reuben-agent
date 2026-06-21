@@ -1,0 +1,87 @@
+# =============================================================================
+# Docker 集成测试配置 — 连接 docker-compose 中的所有中间件
+# 前置: docker compose up -d
+# 使用: @ActiveProfiles("docker")
+# =============================================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3307/reuben_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root123
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+  kafka:
+    bootstrap-servers: 127.0.0.1:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+
+  # 禁用不需要的自动配置
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
+
+  ai:
+    deepseek:
+      api-key: fake-test-key
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        model: bge-m3
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: is_deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    com.reubenagent: DEBUG
+    org.springframework.kafka: DEBUG
+    org.apache.kafka: WARN
+
+reuben:
+  document:
+    minio:
+      endpoint: http://127.0.0.1:9000
+      access-key: minioadmin
+      secret-key: minioadmin
+      bucket-name: reuben-agent-document
+      object-prefix: rag/document
+    pgvector:
+      host: 127.0.0.1
+      port: 5432
+      database: reuben_agent_pgvector
+      username: reuben
+      password: reuben123
+      table-name: public.reuben_agent_document_embedding
+      batch-size: 10
+      embedding-model: bge-m3
+    embedding:
+      dimension: 1024
+    kafka:
+      parse-topic: reuben-agent-document-parse-route
+      index-topic: reuben-agent-document-index-build
+      group-id: reuben-agent-document-test
+      auto-create-topics: true
+    strategy:
+      recursive-overlap-chars: 200
+      semantic-similarity-threshold: 0.7
+      llm-max-input-chars: 8000

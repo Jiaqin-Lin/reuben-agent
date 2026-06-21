@@ -1,20 +1,23 @@
 package com.reubenagent.document.controller;
 
 import com.reubenagent.common.dto.ApiResponse;
+import com.reubenagent.document.dto.DocumentStrategyConfirmDto;
 import com.reubenagent.document.dto.DocumentUploadDto;
 import com.reubenagent.document.service.IDocumentManageService;
+import com.reubenagent.document.vo.DocumentStrategyConfirmVo;
 import com.reubenagent.document.vo.DocumentUploadVo;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.AllArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * 文档管理 REST 接口 —— 提供文档上传入口。
+ * 文档管理 REST 接口 —— 提供文档上传、策略确认等入口。
  *
  * @author reuben
  * @since 2026-06-14
@@ -36,5 +39,15 @@ public class DocumentController {
 
         return ApiResponse.ok(documentManageService.upload(file,
                 documentUploadDto == null ? new DocumentUploadDto() : documentUploadDto));
+    }
+
+    /**
+     * 确认策略方案并触发索引构建。
+     */
+    @Operation(summary = "确认策略方案并触发索引构建")
+    @PostMapping("/strategy/confirm")
+    public ApiResponse<DocumentStrategyConfirmVo> confirmStrategy(
+            @RequestBody DocumentStrategyConfirmDto dto) {
+        return ApiResponse.ok(documentManageService.confirmStrategy(dto));
     }
 }

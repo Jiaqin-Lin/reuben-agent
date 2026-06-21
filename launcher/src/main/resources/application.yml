@@ -60,13 +60,11 @@ spring:
     bootstrap-servers: 127.0.0.1:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
     consumer:
-      group-id: reuben-agent-document
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
-      properties:
-        spring.json.trusted.packages: com.reubenagent.*
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
 
 # =============================================================================
 # reuben-agent 业务模块配置
@@ -90,6 +88,11 @@ reuben:
       embedding-model: bge-m3
     elasticsearch:
       index-name: reuben_document_chunk
+    kafka:
+      parse-topic: reuben-agent-document-parse-route
+      index-topic: reuben-agent-document-index-build
+      group-id: reuben-agent-document
+      auto-create-topics: true
     embedding:
       dimension: 1024
 

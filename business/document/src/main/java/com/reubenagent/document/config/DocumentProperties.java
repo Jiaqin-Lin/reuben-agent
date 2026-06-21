@@ -27,6 +27,8 @@ public class DocumentProperties {
 
     private Elasticsearch elasticsearch = new Elasticsearch();
 
+    private Kafka kafka = new Kafka();
+
     // ============ 内部类 — 按中间件/功能拆分 ============
 
     @Data
@@ -128,5 +130,20 @@ public class DocumentProperties {
     public static class Elasticsearch {
         /** 索引名称 */
         private String indexName = "reuben_document_chunk";
+    }
+
+    /**
+     * Kafka 消息队列配置，绑定 {@code reuben.document.kafka}。
+     */
+    @Data
+    public static class Kafka {
+        /** 文档解析路由任务 Topic */
+        private String parseTopic = "reuben-agent-document-parse-route";
+        /** 索引构建任务 Topic */
+        private String indexTopic = "reuben-agent-document-index-build";
+        /** 消费者组 ID */
+        private String groupId = "reuben-agent-document";
+        /** 是否自动创建 Topic（开发环境开启，生产环境关闭） */
+        private Boolean autoCreateTopics = true;
     }
 }

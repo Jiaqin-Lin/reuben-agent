@@ -22,6 +22,9 @@ public enum DocumentManageCode implements BaseEnum {
     VECTORIZE_FAILED(20007, "向量化失败"),
     INDEX_BUILD_FAILED(20008, "索引构建失败"),
     CHUNK_EXECUTION_FAILED(20009, "切块执行失败"),
+    KAFKA_SEND_FAILED(20010, "Kafka消息发送失败"),
+    PLAN_NOT_FOUND(20011, "策略方案不存在"),
+    PLAN_STATUS_INVALID(20012, "策略方案状态不允许操作"),
     ;
 
     @Getter
