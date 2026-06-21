@@ -96,6 +96,30 @@ reuben:
     embedding:
       dimension: 1024
 
+  # ---------------------------------------------------------------------------
+  # RAG — 混合检索配置（向量 + 关键词 → RRF 融合）
+  # ---------------------------------------------------------------------------
+  rag:
+    retrieval:
+      vector-top-k: 8
+      keyword-top-k: 8
+      final-top-k: 5
+      rrf-k: 60
+      channel-timeout-ms: 5000
+    pgvector:
+      host: 127.0.0.1
+      port: 5432
+      database: reuben_agent_pgvector
+      username: reuben
+      password: reuben123
+      table-name: public.reuben_agent_document_embedding
+      pool-name: RagPgVectorPool
+    elasticsearch:
+      index-name: reuben_document_chunk
+    embedding:
+      model: bge-m3
+      dimension: 1024
+
 # =============================================================================
 # MyBatis-Plus
 # =============================================================================

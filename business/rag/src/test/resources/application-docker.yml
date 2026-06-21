@@ -1,0 +1,56 @@
+# =============================================================================
+# RAG 模块 Docker 集成测试配置
+# 前置: docker compose up -d postgres  (PGVector)
+# 使用: @ActiveProfiles("docker")
+# =============================================================================
+
+spring:
+  # 禁用不需要的自动配置（RAG 模块不依赖 MySQL/Redis/Kafka/ES/Neo4j）
+  autoconfigure:
+    exclude:
+      - com.baomidou.mybatisplus.autoconfigure.MybatisPlusAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration
+      - org.springframework.boot.autoconfigure.jdbc.JdbcTemplateAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
+      - org.redisson.spring.starter.RedissonCacheAutoConfiguration
+      - com.reubenagent.framework.uid.config.UidGeneratorAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
+
+  ai:
+    deepseek:
+      api-key: fake-test-key
+    ollama:
+      base-url: http://localhost:11434
+      embedding:
+        model: bge-m3
+
+logging:
+  level:
+    com.reubenagent: DEBUG
+
+reuben:
+  rag:
+    retrieval:
+      vector-top-k: 8
+      keyword-top-k: 8
+      final-top-k: 5
+      rrf-k: 60
+      channel-timeout-ms: 5000
+    pgvector:
+      host: 127.0.0.1
+      port: 5432
+      database: reuben_agent_pgvector
+      username: reuben
+      password: reuben123
+      table-name: public.reuben_agent_document_embedding
+      pool-name: RagPgVectorPool
+    elasticsearch:
+      index-name: reuben_document_chunk
+    embedding:
+      model: bge-m3
+      dimension: 1024
