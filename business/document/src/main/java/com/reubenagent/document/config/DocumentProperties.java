@@ -25,6 +25,8 @@ public class DocumentProperties {
 
     private Embedding embedding = new Embedding();
 
+    private Elasticsearch elasticsearch = new Elasticsearch();
+
     // ============ 内部类 — 按中间件/功能拆分 ============
 
     @Data
@@ -117,5 +119,14 @@ public class DocumentProperties {
     public static class Embedding {
         /** 向量维度 (bge-m3 = 1024) */
         private Integer dimension = 1024;
+    }
+
+    /**
+     * Elasticsearch 关键字搜索配置，绑定 {@code reuben.document.elasticsearch}。
+     */
+    @Data
+    public static class Elasticsearch {
+        /** 索引名称 */
+        private String indexName = "reuben_document_chunk";
     }
 }

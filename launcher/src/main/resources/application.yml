@@ -88,6 +88,8 @@ reuben:
       table-name: public.reuben_agent_document_embedding
       batch-size: 10
       embedding-model: bge-m3
+    elasticsearch:
+      index-name: reuben_document_chunk
     embedding:
       dimension: 1024
 

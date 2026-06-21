@@ -362,28 +362,29 @@ Phase 9 (集成 & 验证) ──────────────────
 
 ### 8.1 `IDocumentKeywordSearchGateway` 接口
 
-- [ ] 创建文件 `service/keyword/IDocumentKeywordSearchGateway.java`
-- [ ] 创建 `dto/DocumentRetrieveRequest.java` — 字段：`query`, `topK`, `filterFields`（`Map<String, String>`）、`scoreThreshold`
-- [ ] 方法：
+- [x] 创建文件 `service/keyword/IDocumentKeywordSearchGateway.java`
+- [x] 创建 `dto/DocumentRetrieveRequest.java` — 字段：`query`, `topK`, `filterFields`（`Map<String, String>`）、`scoreThreshold`
+- [x] 方法：
   - `void indexChunks(List<DocumentChunk> chunks)`
   - `List<org.springframework.ai.document.Document> search(DocumentRetrieveRequest request)`
   - `void deleteByDocumentId(Long documentId)`
 
 ### 8.2 `NoOpKeywordSearchGateway` 默认实现
 
-- [ ] 创建文件 `service/keyword/NoOpKeywordSearchGateway.java`
-- [ ] 所有方法空实现 + `log.debug("Keyword search disabled, skipping...")`
-- [ ] 注解 `@Primary` 或 `@ConditionalOnMissingBean`
-- [ ] 这是优化 #8 的核心——handler 不需要做 null check，始终注入 `IDocumentKeywordSearchGateway`
+- [x] 创建文件 `service/keyword/NoOpKeywordSearchGateway.java`
+- [x] 所有方法空实现 + `log.debug("Keyword search disabled, skipping...")`
+- [x] 注解 `@ConditionalOnMissingBean`（ES 可用时自动停用）
+- [x] 这是优化 #8 的核心——handler 不需要做 null check，始终注入 `IDocumentKeywordSearchGateway`
 
 ### 8.3 `EsDocumentKeywordSearchGateway` 完整实现
 
-- [ ] 创建文件 `service/keyword/EsDocumentKeywordSearchGateway.java`
-- [ ] 依赖：`ElasticsearchClient`（ES 8.x Java API Client）
-- [ ] `indexChunks()` — 批量索引到 ES（`_bulk` API）
-- [ ] `search()` — 全文检索
-- [ ] `deleteByDocumentId()` — `DELETE_BY_QUERY` where `document_id = ?`
-- [ ] 注解：`@ConditionalOnBean(ElasticsearchClient.class)` + `@Primary`（当 ES 可用时自动替换 NOOP）
+- [x] 创建文件 `service/keyword/EsDocumentKeywordSearchGateway.java`
+- [x] 依赖：`ElasticsearchClient`（ES 8.x Java API Client）
+- [x] `indexChunks()` — 批量索引到 ES（`_bulk` API）、空文本过滤、RuntimeException 兜底
+- [x] `search()` — BM25 全文检索 + filterFields + scoreThreshold，返回 Spring AI Document
+- [x] `deleteByDocumentId()` — `delete_by_query` + refresh=true
+- [x] 注解：`@ConditionalOnBean(ElasticsearchClient.class)` + `@Primary`（当 ES 可用时自动替换 NOOP）
+- [x] 测试：7 NoOp + 16 ES Mock + 3 Docker ES 集成测试 = 26 tests ✅
 
 ---
 
