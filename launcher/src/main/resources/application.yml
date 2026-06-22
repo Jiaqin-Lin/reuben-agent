@@ -130,6 +130,13 @@ reuben:
   # RAG — 混合检索配置（向量 + 关键词 → RRF 融合）
   # ---------------------------------------------------------------------------
   rag:
+    mysql:
+      host: 127.0.0.1
+      port: 3307
+      database: reuben_agent
+      username: root
+      password: root123
+      pool-name: RagMySqlPool
     query-rewrite:
       enabled: true
       min-query-length: 6

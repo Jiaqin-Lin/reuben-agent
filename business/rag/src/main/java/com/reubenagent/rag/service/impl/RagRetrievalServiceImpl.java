@@ -8,6 +8,7 @@ import com.reubenagent.rag.enums.RagErrorCode;
 import com.reubenagent.rag.model.RetrievalResult;
 import com.reubenagent.rag.service.IRagRetrievalService;
 import com.reubenagent.rag.service.KeywordRetrievalChannel;
+import com.reubenagent.rag.service.ParentBlockElevationService;
 import com.reubenagent.rag.service.QueryRewriteService;
 import com.reubenagent.rag.service.RrfFusionService;
 import com.reubenagent.rag.service.VectorRetrievalChannel;
@@ -30,7 +31,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>拆分为 {@link RrfFusionService}（纯融合）+ 本类（编排），职责清晰</li>
  *   <li>超时不吞异常 → {@code exceptionally} 降级，一个通道炸另一个照常返回</li>
  *   <li>用 {@link CompletableFuture} 默认 ForkJoinPool，v1 不引入自定义线程池</li>
- *   <li>不做 sub-question 拆分、parent block elevation、rerank（后续迭代）</li>
+ *   <li>证据门控、查询改写、父块提升各司其职，Pipeline 清晰可测</li>
  * </ul>
  *
  * @author reuben
@@ -44,6 +45,7 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
     private final VectorRetrievalChannel vectorChannel;
     private final KeywordRetrievalChannel keywordChannel;
     private final QueryRewriteService queryRewriteService;
+    private final ParentBlockElevationService elevationService;
     private final RrfFusionService rrfFusionService;
     private final RagProperties ragProperties;
 
@@ -108,17 +110,27 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
                     keywordResults, retrievalConfig.getMinVectorSimilarity(),
                     retrievalConfig.getKeywordRelativeScoreFloor());
 
-            // 阶段 6：RRF 融合
+            // 阶段 6：RRF 融合（暂不截断，留给 elevation 后）
+            int fusionLimit = gatedVector.size() + gatedKeyword.size();
             List<RetrievalResult> fused = rrfFusionService.fuse(
-                    gatedVector, gatedKeyword, rrfK, finalTopK);
+                    gatedVector, gatedKeyword, rrfK, Math.max(fusionLimit, finalTopK));
+
+            // 阶段 7：Parent Block Elevation — 小 chunk 替换为父块完整文本
+            List<RetrievalResult> elevated = elevationService.elevate(fused);
+
+            // 阶段 8：截断到 finalTopK
+            List<RetrievalResult> results = elevated.size() > finalTopK
+                    ? new ArrayList<>(elevated.subList(0, finalTopK))
+                    : elevated;
 
             long totalCostMs = System.currentTimeMillis() - start;
 
-            log.info("RAG 检索完成: query='{}', rewritten={}, finalTopK={}, hits={}, costMs={}",
-                    originalQuery, rewrittenQuery != null, finalTopK, fused.size(), totalCostMs);
+            log.info("RAG 检索完成: query='{}', rewritten={}, finalTopK={}, fused={}, elevated={}, final={}, costMs={}",
+                    originalQuery, rewrittenQuery != null, finalTopK,
+                    fused.size(), elevated.size(), results.size(), totalCostMs);
 
             return RagRetrieveResponse.builder()
-                    .results(fused)
+                    .results(results)
                     .totalCostMs(totalCostMs)
                     .rewrittenQuery(rewrittenQuery)
                     .build();

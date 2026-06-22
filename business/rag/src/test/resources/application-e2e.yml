@@ -93,6 +93,14 @@ reuben:
       index-name: reuben_document_chunk
 
   rag:
+    mysql:
+      host: 127.0.0.1
+      port: 3307
+      database: reuben_agent
+      username: root
+      password: root123
+      pool-name: RagMySqlE2EPool
+      read-only: false
     retrieval:
       vector-top-k: 8
       keyword-top-k: 8

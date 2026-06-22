@@ -59,7 +59,15 @@ class EsDocumentKeywordSearchGatewayTest {
         DocumentProperties properties = new DocumentProperties();
         properties.getElasticsearch().setIndexName("reuben_document_chunk");
 
-        gateway = new EsDocumentKeywordSearchGateway(esClient, properties);
+        gateway = new EsDocumentKeywordSearchGateway(
+                new org.springframework.beans.factory.ObjectProvider<>() {
+                    @Override
+                    public ElasticsearchClient getObject() { return esClient; }
+                    @Override
+                    public ElasticsearchClient getIfAvailable() { return esClient; }
+                    @Override
+                    public ElasticsearchClient getIfUnique() { return esClient; }
+                }, properties);
     }
 
     // ============ indexChunks ============

@@ -9,6 +9,7 @@ import com.reubenagent.document.entity.DocumentChunk;
 import com.reubenagent.document.enums.DocumentChunkSourceTypeEnum;
 import org.apache.http.HttpHost;
 import org.elasticsearch.client.RestClient;
+import org.springframework.beans.factory.ObjectProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -51,7 +52,15 @@ class EsDocumentKeywordSearchGatewayIntegrationTest {
 
         DocumentProperties properties = new DocumentProperties();
         properties.getElasticsearch().setIndexName(TEST_INDEX);
-        gateway = new EsDocumentKeywordSearchGateway(esClient, properties);
+        gateway = new EsDocumentKeywordSearchGateway(
+                new ObjectProvider<>() {
+                    @Override
+                    public ElasticsearchClient getObject() { return esClient; }
+                    @Override
+                    public ElasticsearchClient getIfAvailable() { return esClient; }
+                    @Override
+                    public ElasticsearchClient getIfUnique() { return esClient; }
+                }, properties);
     }
 
     @BeforeEach

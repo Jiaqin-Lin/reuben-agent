@@ -62,6 +62,14 @@ reuben:
       password: reuben123
       table-name: public.reuben_agent_document_embedding
       pool-name: RagPgVectorPool
+    mysql:
+      host: 127.0.0.1
+      port: 3307
+      database: reuben_agent
+      username: root
+      password: root123
+      pool-name: RagMySqlPool
+      read-only: false
     elasticsearch:
       index-name: reuben_document_chunk
     embedding:

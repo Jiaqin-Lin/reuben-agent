@@ -21,6 +21,8 @@ public class RagProperties {
 
     private Pgvector pgvector = new Pgvector();
 
+    private Mysql mysql = new Mysql();
+
     private Elasticsearch elasticsearch = new Elasticsearch();
 
     private Embedding embedding = new Embedding();
@@ -80,6 +82,27 @@ public class RagProperties {
         private String tableName = "public.reuben_agent_document_embedding";
         /** 连接池名称（与 document 模块的 DocumentPgVectorPool 隔离） */
         private String poolName = "RagPgVectorPool";
+    }
+
+    /**
+     * MySQL 只读连接配置（查询 parent block 文本），绑定 {@code reuben.rag.mysql}。
+     */
+    @Data
+    public static class Mysql {
+        /** 主机地址 */
+        private String host = "127.0.0.1";
+        /** 端口 */
+        private int port = 3307;
+        /** 数据库名 */
+        private String database = "reuben_agent";
+        /** 用户名 */
+        private String username = "root";
+        /** 密码 */
+        private String password = "root123";
+        /** 连接池名称 */
+        private String poolName = "RagMySqlPool";
+        /** 是否只读连接（生产环境应设为 true） */
+        private boolean readOnly = true;
     }
 
     /**
