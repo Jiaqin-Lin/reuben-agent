@@ -341,15 +341,16 @@ query → rewrite → 并行双通道 → evidence gate → RRF → parent block
 
 ### 7.2 修改 `RagRetrievalServiceImpl`
 
-- [ ] 向量通道结果过滤：`result.score < minVectorSimilarity` → 丢弃
-- [ ] 关键词通道结果过滤：`result.score < maxScore * keywordRelativeScoreFloor` → 丢弃
-- [ ] 过滤后的结果才进入 RRF 融合
-- [ ] gate 前后的数量记入 debug 日志
+- [x] 向量通道结果过滤：`result.score < minVectorSimilarity` → 丢弃
+- [x] 关键词通道结果过滤：`result.score < maxScore * keywordRelativeScoreFloor` → 丢弃
+- [x] 过滤后的结果才进入 RRF 融合
+- [x] gate 前后的数量记入 debug 日志
 
 ### 7.3 与 super-agent 的差异
 
-- super-agent 的 gate 逻辑散落在 `RagRetrievalEngine` 的 300 行方法里
-- reuben-agent 提取为 `applyEvidenceGates(vectorResults, keywordResults)` 私有方法
+- [x] super-agent 的 gate 逻辑散落在 `RagRetrievalEngine` 的 300 行方法里
+- [x] reuben-agent 提取为 `applyEvidenceGates(vectorResults, keywordResults)` 私有方法
+- [x] 测试：`RagEvidenceGateIntegrationTest` 5 个 Docker 集成测试全部通过
 
 ---
 

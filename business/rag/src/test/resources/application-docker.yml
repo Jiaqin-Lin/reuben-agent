@@ -26,7 +26,7 @@ spring:
       chat: deepseek
       embedding: ollama
     deepseek:
-      api-key: fake-test-key
+      api-key: ${DEEPSEEK_API_KEY:fake-test-key}
       chat:
         options:
           model: deepseek-v4-flash
@@ -43,6 +43,9 @@ logging:
 
 reuben:
   rag:
+    query-rewrite:
+      enabled: true
+      min-query-length: 6
     retrieval:
       vector-top-k: 8
       keyword-top-k: 8

@@ -130,6 +130,9 @@ reuben:
   # RAG — 混合检索配置（向量 + 关键词 → RRF 融合）
   # ---------------------------------------------------------------------------
   rag:
+    query-rewrite:
+      enabled: true
+      min-query-length: 6
     retrieval:
       vector-top-k: 8
       keyword-top-k: 8

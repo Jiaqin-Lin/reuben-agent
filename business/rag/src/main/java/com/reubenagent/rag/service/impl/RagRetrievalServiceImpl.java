@@ -8,6 +8,7 @@ import com.reubenagent.rag.enums.RagErrorCode;
 import com.reubenagent.rag.model.RetrievalResult;
 import com.reubenagent.rag.service.IRagRetrievalService;
 import com.reubenagent.rag.service.KeywordRetrievalChannel;
+import com.reubenagent.rag.service.QueryRewriteService;
 import com.reubenagent.rag.service.RrfFusionService;
 import com.reubenagent.rag.service.VectorRetrievalChannel;
 import com.reubenagent.rag.vo.RagRetrieveResponse;
@@ -42,6 +43,7 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
 
     private final VectorRetrievalChannel vectorChannel;
     private final KeywordRetrievalChannel keywordChannel;
+    private final QueryRewriteService queryRewriteService;
     private final RrfFusionService rrfFusionService;
     private final RagProperties ragProperties;
 
@@ -61,10 +63,19 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
         Map<String, String> filters = request.getFilterFields();
 
         try {
-            // 阶段 2：并行调用两个通道
+            // 阶段 2：Query Rewrite — LLM 改写查询，提升召回命中率
+            String originalQuery = request.getQuery();
+            String searchQuery = queryRewriteService.rewrite(originalQuery);
+            String rewrittenQuery = searchQuery.equals(originalQuery) ? null : searchQuery;
+            if (rewrittenQuery != null) {
+                log.info("查询改写: '{}' → '{}'", originalQuery, rewrittenQuery);
+            }
+
+            // 阶段 3：并行调用两个通道
+            String finalSearchQuery = searchQuery;
             CompletableFuture<List<RetrievalResult>> vectorFuture =
                     CompletableFuture.supplyAsync(() ->
-                            vectorChannel.retrieve(request.getQuery(), vectorTopK, filters))
+                            vectorChannel.retrieve(finalSearchQuery, vectorTopK, filters))
                             .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                             .exceptionally(ex -> {
                                 log.warn("向量通道异常/超时，降级返回空列表: {}", ex.getMessage());
@@ -73,14 +84,14 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
 
             CompletableFuture<List<RetrievalResult>> keywordFuture =
                     CompletableFuture.supplyAsync(() ->
-                            keywordChannel.retrieve(request.getQuery(), keywordTopK, filters))
+                            keywordChannel.retrieve(finalSearchQuery, keywordTopK, filters))
                             .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
                             .exceptionally(ex -> {
                                 log.warn("关键词通道异常/超时，降级返回空列表: {}", ex.getMessage());
                                 return List.of();
                             });
 
-            // 阶段 3：等待两个通道都完成（或超时降级）
+            // 阶段 4：等待两个通道都完成（或超时降级）
             CompletableFuture.allOf(vectorFuture, keywordFuture).join();
 
             List<RetrievalResult> vectorResults = vectorFuture.get();
@@ -88,7 +99,7 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
 
             log.debug("双通道检索完成: vector={}, keyword={}", vectorResults.size(), keywordResults.size());
 
-            // 阶段 4：Evidence Gates — 过滤弱相关噪声
+            // 阶段 5：Evidence Gates — 过滤弱相关噪声
             List<RetrievalResult> gatedVector = applyEvidenceGates(
                     vectorResults, retrievalConfig.getMinVectorSimilarity(),
                     retrievalConfig.getKeywordRelativeScoreFloor());
@@ -97,18 +108,19 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
                     keywordResults, retrievalConfig.getMinVectorSimilarity(),
                     retrievalConfig.getKeywordRelativeScoreFloor());
 
-            // 阶段 5：RRF 融合
+            // 阶段 6：RRF 融合
             List<RetrievalResult> fused = rrfFusionService.fuse(
                     gatedVector, gatedKeyword, rrfK, finalTopK);
 
             long totalCostMs = System.currentTimeMillis() - start;
 
-            log.info("RAG 检索完成: query={}, finalTopK={}, hits={}, costMs={}",
-                    request.getQuery(), finalTopK, fused.size(), totalCostMs);
+            log.info("RAG 检索完成: query='{}', rewritten={}, finalTopK={}, hits={}, costMs={}",
+                    originalQuery, rewrittenQuery != null, finalTopK, fused.size(), totalCostMs);
 
             return RagRetrieveResponse.builder()
                     .results(fused)
                     .totalCostMs(totalCostMs)
+                    .rewrittenQuery(rewrittenQuery)
                     .build();
 
         } catch (Exception e) {

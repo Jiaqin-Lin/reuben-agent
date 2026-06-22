@@ -17,6 +17,8 @@ public class RagProperties {
 
     private Retrieval retrieval = new Retrieval();
 
+    private QueryRewrite queryRewrite = new QueryRewrite();
+
     private Pgvector pgvector = new Pgvector();
 
     private Elasticsearch elasticsearch = new Elasticsearch();
@@ -24,6 +26,17 @@ public class RagProperties {
     private Embedding embedding = new Embedding();
 
     // ============ 内部类 — 按功能拆分 ============
+
+    /**
+     * 查询改写配置，绑定 {@code reuben.rag.query-rewrite}。
+     */
+    @Data
+    public static class QueryRewrite {
+        /** 是否启用查询改写 */
+        private boolean enabled = true;
+        /** 最短触发长度（字），低于此值的查询不调用 LLM */
+        private int minQueryLength = 6;
+    }
 
     /**
      * 检索参数配置，绑定 {@code reuben.rag.retrieval}。
