@@ -136,6 +136,8 @@ reuben:
       final-top-k: 5
       rrf-k: 60
       channel-timeout-ms: 5000
+      min-vector-similarity: 0.45
+      keyword-relative-score-floor: 0.35
     pgvector:
       host: 127.0.0.1
       port: 5432

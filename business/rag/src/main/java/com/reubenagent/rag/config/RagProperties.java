@@ -40,6 +40,10 @@ public class RagProperties {
         private int rrfK = 60;
         /** 单通道超时时间（ms） */
         private long channelTimeoutMs = 5000;
+        /** 向量通道最低余弦相似度阈值（低于此值的结果被丢弃） */
+        private double minVectorSimilarity = 0.45;
+        /** 关键词通道相对分数下限（相对于该通道最高分的比例，0~1） */
+        private double keywordRelativeScoreFloor = 0.35;
     }
 
     /**
