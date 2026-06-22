@@ -54,3 +54,14 @@ AGENTS.md
 .env.*
 
 /document
+
+### UI ###
+ui/node_modules/
+ui/dist/
+ui/package-lock.json
+
+### Docs test files ###
+docs/doc-to-test/
+
+### Frontend static output ###
+launcher/src/main/resources/static/

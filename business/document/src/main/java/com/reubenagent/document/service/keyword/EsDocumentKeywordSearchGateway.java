@@ -1,7 +1,6 @@
 package com.reubenagent.document.service.keyword;
 
 import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.elasticsearch.ElasticsearchClient;
 import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.BulkResponse;
 import co.elastic.clients.elasticsearch.core.DeleteByQueryResponse;
@@ -13,7 +12,7 @@ import com.reubenagent.document.config.DocumentProperties;
 import com.reubenagent.document.dto.DocumentRetrieveRequest;
 import com.reubenagent.document.entity.DocumentChunk;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -43,19 +42,24 @@ import java.util.Map;
 @Slf4j
 @Component
 @Primary
-@ConditionalOnBean(ElasticsearchClient.class)
 public class EsDocumentKeywordSearchGateway implements IDocumentKeywordSearchGateway {
 
     private static final String FIELD_DOCUMENT_ID = "documentId";
     private static final String FIELD_CHUNK_TEXT = "chunkText";
 
-    private final ElasticsearchClient esClient;
+    private final ObjectProvider<ElasticsearchClient> esClientProvider;
     private final String indexName;
     private volatile boolean indexReady;
 
-    public EsDocumentKeywordSearchGateway(ElasticsearchClient esClient, DocumentProperties properties) {
-        this.esClient = esClient;
+    public EsDocumentKeywordSearchGateway(ObjectProvider<ElasticsearchClient> esClientProvider,
+                                          DocumentProperties properties) {
+        this.esClientProvider = esClientProvider;
         this.indexName = properties.getElasticsearch().getIndexName();
+    }
+
+    /** 防御式获取 ES Client，不可用时返回 null。 */
+    private ElasticsearchClient getEsClient() {
+        return esClientProvider.getIfAvailable();
     }
 
     @Override
@@ -65,7 +69,13 @@ public class EsDocumentKeywordSearchGateway implements IDocumentKeywordSearchGat
             return;
         }
 
-        ensureIndex();
+        ElasticsearchClient esClient = getEsClient();
+        if (esClient == null) {
+            log.warn("ElasticsearchClient 不可用，跳过 ES 索引");
+            return;
+        }
+
+        ensureIndex(esClient);
 
         // 过滤有效 chunk
         List<DocumentChunk> validChunks = chunks.stream()
@@ -108,7 +118,13 @@ public class EsDocumentKeywordSearchGateway implements IDocumentKeywordSearchGat
             return Collections.emptyList();
         }
 
-        ensureIndex();
+        ElasticsearchClient esClient = getEsClient();
+        if (esClient == null) {
+            log.warn("ElasticsearchClient 不可用，返回空列表");
+            return Collections.emptyList();
+        }
+
+        ensureIndex(esClient);
 
         try {
             SearchResponse<Map> response = esClient.search(s -> {
@@ -174,7 +190,13 @@ public class EsDocumentKeywordSearchGateway implements IDocumentKeywordSearchGat
             return;
         }
 
-        ensureIndex();
+        ElasticsearchClient esClient = getEsClient();
+        if (esClient == null) {
+            log.warn("ElasticsearchClient 不可用，跳过删除");
+            return;
+        }
+
+        ensureIndex(esClient);
 
         try {
             DeleteByQueryResponse response = esClient.deleteByQuery(d -> d
@@ -196,7 +218,7 @@ public class EsDocumentKeywordSearchGateway implements IDocumentKeywordSearchGat
     // ============ 私有方法 ============
 
     /** 懒初始化索引——若索引不存在则创建。 */
-    private void ensureIndex() {
+    private void ensureIndex(ElasticsearchClient esClient) {
         if (indexReady) {
             return;
         }

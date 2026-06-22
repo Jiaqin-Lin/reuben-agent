@@ -8,15 +8,30 @@ spring:
     name: reuben-agent
 
   # ---------------------------------------------------------------------------
-  # AI — 本地开发用 fake key，生产环境通过环境变量覆盖
+  # 文件上传大小限制
+  # ---------------------------------------------------------------------------
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 110MB
+
+  # ---------------------------------------------------------------------------
+  # AI — 仅保留 DeepSeek Chat + Ollama Embedding，其余禁用
+  # 本地开发用 fake key，生产环境通过环境变量覆盖
   # ---------------------------------------------------------------------------
   ai:
-    openai:
-      api-key: fake-dev-key
+    model:
+      chat: deepseek
+      embedding: ollama
     deepseek:
       api-key: fake-dev-key
+      chat:
+        options:
+          model: deepseek-v4-flash
     ollama:
       base-url: http://localhost:11434
+      chat:
+        enabled: false
       embedding:
         model: bge-m3
 
@@ -77,6 +92,9 @@ spring:
       - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
       - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      - org.springframework.ai.model.chat.client.autoconfigure.ChatClientAutoConfiguration
 
 # =============================================================================
 # reuben-agent 业务模块配置

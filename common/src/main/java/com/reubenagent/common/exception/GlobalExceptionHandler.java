@@ -84,6 +84,27 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(BaseCode.PARAMETER_ERROR.getCode(), errors);
     }
 
+    // ==================== 文件上传异常 ====================
+
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ApiResponse<String> handleMaxUploadSize(HttpServletRequest request,
+                                                    org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        log.warn("文件过大 → maxSize={} actualSize={} {} {}",
+                e.getMaxUploadSize(), e.getMaxUploadSize(),
+                request.getMethod(), request.getRequestURL());
+        return ApiResponse.error(BaseCode.PARAMETER_ERROR.getCode(),
+                "文件大小超出限制，最大支持 " + (e.getMaxUploadSize() / 1024 / 1024) + "MB");
+    }
+
+    @ExceptionHandler(org.springframework.web.multipart.MultipartException.class)
+    public ApiResponse<String> handleMultipart(HttpServletRequest request,
+                                                org.springframework.web.multipart.MultipartException e) {
+        log.warn("文件上传异常 → msg={} {} {}", e.getMessage(),
+                request.getMethod(), request.getRequestURL());
+        return ApiResponse.error(BaseCode.PARAMETER_ERROR.getCode(),
+                "文件上传失败: " + e.getMessage());
+    }
+
     // ==================== 未知异常（只抓 Exception，不抓 Error） ====================
 
     /**

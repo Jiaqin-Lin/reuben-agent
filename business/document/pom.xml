@@ -15,6 +15,16 @@
     <description>Document management: upload, parse, chunk, index, knowledge</description>
 
     <dependencies>
+        <!-- Internal -->
+        <dependency>
+            <groupId>com.reubenagent</groupId>
+            <artifactId>reuben-agent-common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.reubenagent</groupId>
+            <artifactId>reuben-agent-framework</artifactId>
+        </dependency>
+
         <!-- MinIO -->
         <dependency>
             <groupId>io.minio</groupId>

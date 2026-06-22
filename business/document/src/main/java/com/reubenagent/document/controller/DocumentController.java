@@ -62,7 +62,7 @@ public class DocumentController {
      */
     @Operation(summary = "获取策略方案列表")
     @GetMapping("/strategy/plan")
-    public ApiResponse<List<DocumentStrategyPlanVo>> getPlans(@RequestParam Long documentId) {
+    public ApiResponse<List<DocumentStrategyPlanVo>> getPlans(@RequestParam("documentId") Long documentId) {
         return ApiResponse.ok(documentManageService.getPlans(documentId));
     }
 

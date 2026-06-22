@@ -332,6 +332,7 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
                 .charCount(doc.getCharCount())
                 .structureLevel(doc.getStructureLevel())
                 .contentQualityLevel(doc.getContentQualityLevel())
+                .createTime(doc.getCreateTime())
                 .build();
     }
 

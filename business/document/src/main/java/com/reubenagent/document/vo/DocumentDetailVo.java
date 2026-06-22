@@ -1,9 +1,12 @@
 package com.reubenagent.document.vo;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
+import java.util.Date;
 
 /**
  * 文档详情 VO —— 供查询接口使用。
@@ -27,5 +30,9 @@ public class DocumentDetailVo {
     private Integer indexStatus;
     private Integer charCount;
     private Integer structureLevel;
+
+    @JsonProperty("qualityLevel")
     private Integer contentQualityLevel;
+
+    private Date createTime;
 }
