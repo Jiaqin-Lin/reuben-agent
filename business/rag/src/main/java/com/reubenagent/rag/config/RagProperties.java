@@ -19,6 +19,8 @@ public class RagProperties {
 
     private QueryRewrite queryRewrite = new QueryRewrite();
 
+    private Rerank rerank = new Rerank();
+
     private Pgvector pgvector = new Pgvector();
 
     private Mysql mysql = new Mysql();
@@ -59,6 +61,29 @@ public class RagProperties {
         private double minVectorSimilarity = 0.45;
         /** 关键词通道相对分数下限（相对于该通道最高分的比例，0~1） */
         private double keywordRelativeScoreFloor = 0.35;
+    }
+
+    /**
+     * 重排序配置，绑定 {@code reuben.rag.rerank}。
+     *
+     * <p>用 cross-encoder 模型对 elevation 后的结果精排，默认关闭。</p>
+     */
+    @Data
+    public static class Rerank {
+        /** 是否启用重排序（需要外部 rerank API） */
+        private boolean enabled = false;
+        /** Rerank API 地址 */
+        private String url = "https://api.siliconflow.cn/v1/rerank";
+        /** API Key（通过环境变量注入） */
+        private String apiKey = "";
+        /** Rerank 模型名称 */
+        private String model = "BAAI/bge-reranker-v2-m3";
+        /** Rerank 返回数 */
+        private int topN = 5;
+        /** HTTP 连接超时（ms） */
+        private int connectTimeoutMs = 3000;
+        /** HTTP 读取超时（ms） */
+        private int readTimeoutMs = 6000;
     }
 
     /**

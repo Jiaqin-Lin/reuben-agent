@@ -10,6 +10,7 @@ import com.reubenagent.rag.service.IRagRetrievalService;
 import com.reubenagent.rag.service.KeywordRetrievalChannel;
 import com.reubenagent.rag.service.ParentBlockElevationService;
 import com.reubenagent.rag.service.QueryRewriteService;
+import com.reubenagent.rag.service.RerankService;
 import com.reubenagent.rag.service.RrfFusionService;
 import com.reubenagent.rag.service.VectorRetrievalChannel;
 import com.reubenagent.rag.vo.RagRetrieveResponse;
@@ -46,6 +47,7 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
     private final KeywordRetrievalChannel keywordChannel;
     private final QueryRewriteService queryRewriteService;
     private final ParentBlockElevationService elevationService;
+    private final RerankService rerankService;
     private final RrfFusionService rrfFusionService;
     private final RagProperties ragProperties;
 
@@ -118,16 +120,19 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
             // 阶段 7：Parent Block Elevation — 小 chunk 替换为父块完整文本
             List<RetrievalResult> elevated = elevationService.elevate(fused);
 
-            // 阶段 8：截断到 finalTopK
-            List<RetrievalResult> results = elevated.size() > finalTopK
-                    ? new ArrayList<>(elevated.subList(0, finalTopK))
-                    : elevated;
+            // 阶段 8：Rerank — cross-encoder 精排
+            List<RetrievalResult> reranked = rerankService.rerank(originalQuery, elevated);
+
+            // 阶段 9：截断到 finalTopK
+            List<RetrievalResult> results = reranked.size() > finalTopK
+                    ? new ArrayList<>(reranked.subList(0, finalTopK))
+                    : reranked;
 
             long totalCostMs = System.currentTimeMillis() - start;
 
-            log.info("RAG 检索完成: query='{}', rewritten={}, finalTopK={}, fused={}, elevated={}, final={}, costMs={}",
+            log.info("RAG 检索完成: query='{}', rewritten={}, finalTopK={}, fused={}, elevated={}, reranked={}, final={}, costMs={}",
                     originalQuery, rewrittenQuery != null, finalTopK,
-                    fused.size(), elevated.size(), results.size(), totalCostMs);
+                    fused.size(), elevated.size(), reranked.size(), results.size(), totalCostMs);
 
             return RagRetrieveResponse.builder()
                     .results(results)

@@ -43,7 +43,11 @@ public class RetrievalResult {
     @Schema(description = "父块 ID")
     private Long parentBlockId;
 
-    /** 来源标记：vector / keyword / hybrid */
-    @Schema(description = "来源标记", example = "hybrid")
+    /** 来源标记：vector / keyword / hybrid（后续管线可能追加 +parent / +rerank） */
+    @Schema(description = "来源标记", example = "hybrid+parent+rerank")
     private String source;
+
+    /** 重排序前的分数（RRF 融合分数），rerank 后记录于此供可观测 */
+    @Schema(description = "重排序前分数", example = "0.032")
+    private Double rerankScore;
 }

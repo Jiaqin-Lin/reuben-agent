@@ -148,6 +148,14 @@ reuben:
       channel-timeout-ms: 5000
       min-vector-similarity: 0.45
       keyword-relative-score-floor: 0.35
+    rerank:
+      enabled: false
+      url: https://api.siliconflow.cn/v1/rerank
+      api-key: ${SILICONFLOW_API_KEY:}
+      model: BAAI/bge-reranker-v2-m3
+      top-n: 5
+      connect-timeout-ms: 3000
+      read-timeout-ms: 6000
     pgvector:
       host: 127.0.0.1
       port: 5432
