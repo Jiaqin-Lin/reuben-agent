@@ -414,3 +414,220 @@ CREATE TABLE IF NOT EXISTS `WORKER_NODE` (
     `CREATED` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`ID`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='DB WorkerID Assigner for UID Generator';
+
+-- =============================================================================
+-- 对话模块 chat 表（reuben_agent_chat_*）
+-- 列名语义化，update_time（非 edit_time），is_deleted
+-- =============================================================================
+
+-- ---------------------------------------------------------------------------
+-- 会话表
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_conversation` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT '会话业务ID',
+    `session_status` TINYINT DEFAULT 1 COMMENT '会话状态: 1=空闲 2=执行中',
+    `chat_mode` TINYINT DEFAULT NULL COMMENT '对话模式: 1=DOCUMENT 2=OPEN_CHAT 3=AUTO_DOCUMENT',
+    `title` VARCHAR(256) DEFAULT NULL COMMENT '会话标题',
+    `selected_document_id` BIGINT DEFAULT NULL COMMENT '选中文档ID',
+    `selected_document_name` VARCHAR(512) DEFAULT NULL COMMENT '选中文档名快照',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_conversation_id` (`conversation_id`),
+    KEY `idx_chat_mode` (`chat_mode`),
+    KEY `idx_session_status` (`session_status`),
+    KEY `idx_selected_document_id` (`selected_document_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话会话';
+
+-- ---------------------------------------------------------------------------
+-- 轮次表
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_turn` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT '会话ID',
+    `user_prompt` TEXT DEFAULT NULL COMMENT '用户提问',
+    `reply_content` MEDIUMTEXT DEFAULT NULL COMMENT '回答内容',
+    `reasoning_note_list` TEXT DEFAULT NULL COMMENT '推理过程JSON',
+    `source_snapshot_list` TEXT DEFAULT NULL COMMENT '引用快照JSON',
+    `followup_suggestion_list` TEXT DEFAULT NULL COMMENT '追问建议JSON',
+    `tool_trace_list` TEXT DEFAULT NULL COMMENT '工具调用追踪JSON',
+    `debug_trace_json` MEDIUMTEXT DEFAULT NULL COMMENT '调试追踪JSON',
+    `turn_status` TINYINT DEFAULT 1 COMMENT '轮次状态: 1=执行中 2=完成 3=失败 4=停止',
+    `execution_mode` TINYINT DEFAULT NULL COMMENT '执行模式',
+    `finish_note` VARCHAR(512) DEFAULT NULL COMMENT '收尾说明',
+    `first_token_latency_ms` BIGINT DEFAULT NULL COMMENT '首字延迟毫秒',
+    `total_latency_ms` BIGINT DEFAULT NULL COMMENT '总耗时毫秒',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_conversation_turn` (`conversation_id`, `id`),
+    KEY `idx_turn_status` (`turn_status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话轮次';
+
+-- ---------------------------------------------------------------------------
+-- 会话记忆摘要（一 conversation 一行）
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_memory_summary` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT '会话ID',
+    `covered_turn_id` BIGINT DEFAULT NULL COMMENT '已覆盖到的最近轮次ID',
+    `covered_turn_count` INT DEFAULT 0 COMMENT '已覆盖轮次数',
+    `compression_count` INT DEFAULT 0 COMMENT '压缩次数',
+    `summary_version` INT DEFAULT 1 COMMENT '摘要版本',
+    `summary_text` TEXT DEFAULT NULL COMMENT '摘要文本',
+    `summary_json` MEDIUMTEXT DEFAULT NULL COMMENT '摘要结构JSON(ChatSummaryPayload)',
+    `last_source_edit_time` DATETIME DEFAULT NULL COMMENT '最近源轮次时间',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_conversation_id` (`conversation_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='会话记忆摘要';
+
+-- ---------------------------------------------------------------------------
+-- 追踪阶段
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_trace_stage` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT '会话ID',
+    `turn_id` BIGINT NOT NULL COMMENT '轮次ID',
+    `trace_id` VARCHAR(64) DEFAULT NULL COMMENT '追踪ID',
+    `stage_code` TINYINT NOT NULL COMMENT '阶段编码(ChatTraceStageCode)',
+    `stage_name` VARCHAR(64) DEFAULT NULL COMMENT '阶段名称',
+    `stage_order` INT DEFAULT NULL COMMENT '阶段顺序',
+    `stage_level` TINYINT DEFAULT 1 COMMENT '阶段层级',
+    `parent_stage_id` BIGINT DEFAULT NULL COMMENT '父阶段ID',
+    `execution_mode` TINYINT DEFAULT NULL COMMENT '执行模式',
+    `stage_state` TINYINT DEFAULT NULL COMMENT '阶段状态(ChatTraceStageState)',
+    `start_time` DATETIME DEFAULT NULL,
+    `end_time` DATETIME DEFAULT NULL,
+    `duration_ms` BIGINT DEFAULT NULL,
+    `summary_text` VARCHAR(1024) DEFAULT NULL COMMENT '阶段摘要',
+    `error_message` VARCHAR(2048) DEFAULT NULL COMMENT '错误信息',
+    `snapshot_json` MEDIUMTEXT DEFAULT NULL COMMENT '阶段快照JSON',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_turn_stage` (`turn_id`, `stage_order`),
+    KEY `idx_conversation_trace` (`conversation_id`, `trace_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话追踪阶段';
+
+-- ---------------------------------------------------------------------------
+-- 检索结果
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_retrieval_result` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT '会话ID',
+    `turn_id` BIGINT NOT NULL COMMENT '轮次ID',
+    `trace_id` VARCHAR(64) DEFAULT NULL COMMENT '追踪ID',
+    `sub_question_index` INT DEFAULT 0 COMMENT '子问题序号',
+    `channel_type` VARCHAR(16) DEFAULT NULL COMMENT '通道类型: vector/keyword/hybrid',
+    `vector_rank` INT DEFAULT NULL,
+    `vector_score` DECIMAL(10,6) DEFAULT NULL,
+    `keyword_rank` INT DEFAULT NULL,
+    `keyword_score` DECIMAL(10,6) DEFAULT NULL,
+    `rerank_score` DECIMAL(10,6) DEFAULT NULL,
+    `final_score` DECIMAL(10,6) DEFAULT NULL,
+    `gate_passed` TINYINT DEFAULT 0 COMMENT '是否通过门控',
+    `is_elevated` TINYINT DEFAULT 0 COMMENT '是否父块提升',
+    `is_selected` TINYINT DEFAULT 0 COMMENT '是否入选最终证据',
+    `selection_reason` VARCHAR(256) DEFAULT NULL,
+    `document_id` BIGINT DEFAULT NULL,
+    `document_name` VARCHAR(512) DEFAULT NULL,
+    `chunk_id` BIGINT DEFAULT NULL,
+    `parent_block_id` BIGINT DEFAULT NULL,
+    `section_path` VARCHAR(1024) DEFAULT NULL,
+    `chunk_text_preview` VARCHAR(2048) DEFAULT NULL,
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_turn_retrieval` (`turn_id`, `sub_question_index`),
+    KEY `idx_conversation_retrieval` (`conversation_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话检索结果';
+
+-- ---------------------------------------------------------------------------
+-- 通道执行
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_channel_execution` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `conversation_id` VARCHAR(64) NOT NULL COMMENT '会话ID',
+    `turn_id` BIGINT NOT NULL COMMENT '轮次ID',
+    `trace_id` VARCHAR(64) DEFAULT NULL COMMENT '追踪ID',
+    `sub_question_index` INT DEFAULT 0 COMMENT '子问题序号',
+    `channel_type` VARCHAR(16) NOT NULL COMMENT '通道类型',
+    `execution_state` VARCHAR(16) DEFAULT NULL COMMENT '执行状态',
+    `start_time` DATETIME DEFAULT NULL,
+    `end_time` DATETIME DEFAULT NULL,
+    `duration_ms` BIGINT DEFAULT NULL,
+    `recalled_count` INT DEFAULT NULL COMMENT '召回数',
+    `accepted_count` INT DEFAULT NULL COMMENT '通过门控数',
+    `final_selected_count` INT DEFAULT NULL COMMENT '最终入选数',
+    `max_score` DECIMAL(10,6) DEFAULT NULL,
+    `min_score` DECIMAL(10,6) DEFAULT NULL,
+    `avg_score` DECIMAL(10,6) DEFAULT NULL,
+    `config_snapshot` TEXT DEFAULT NULL COMMENT '配置快照JSON',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_turn_channel` (`turn_id`, `sub_question_index`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话通道执行';
+
+-- ---------------------------------------------------------------------------
+-- 阶段基准（P50/P90/P99 滑窗）
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_stage_benchmark` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `stage_code` TINYINT NOT NULL COMMENT '阶段编码',
+    `execution_mode` TINYINT NOT NULL COMMENT '执行模式',
+    `p50` BIGINT DEFAULT NULL,
+    `p90` BIGINT DEFAULT NULL,
+    `p99` BIGINT DEFAULT NULL,
+    `avg` BIGINT DEFAULT NULL,
+    `max` BIGINT DEFAULT NULL,
+    `min` BIGINT DEFAULT NULL,
+    `sample_count` INT DEFAULT 0,
+    `recent_durations` TEXT DEFAULT NULL COMMENT '最近样本JSON',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_stage_mode` (`stage_code`, `execution_mode`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='对话阶段基准';
+
+-- ---------------------------------------------------------------------------
+-- ReAct 工作记忆 checkpoint（自建轻量表，脱离 Alibaba MysqlSaver）
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_checkpoint` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `thread_id` VARCHAR(64) NOT NULL COMMENT '线程ID(=conversationId)',
+    `checkpoint_id` VARCHAR(128) NOT NULL COMMENT '检查点ID',
+    `parent_checkpoint_id` VARCHAR(128) DEFAULT NULL,
+    `messages_json` MEDIUMTEXT DEFAULT NULL COMMENT '消息列表JSON',
+    `state_json` MEDIUMTEXT DEFAULT NULL COMMENT '状态JSON',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_thread_checkpoint` (`thread_id`, `checkpoint_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='ReAct 工作记忆检查点';
+
+-- ---------------------------------------------------------------------------
+-- 线程表（一个 conversation 一个线程）
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `reuben_agent_chat_thread` (
+    `id` BIGINT NOT NULL COMMENT '主键',
+    `thread_id` VARCHAR(64) NOT NULL COMMENT '线程ID(=conversationId)',
+    `thread_name` VARCHAR(256) DEFAULT NULL COMMENT '线程名(=conversationId)',
+    `latest_checkpoint_id` VARCHAR(128) DEFAULT NULL COMMENT '最新检查点ID',
+    `create_time` DATETIME DEFAULT NULL,
+    `update_time` DATETIME DEFAULT NULL,
+    `is_deleted` TINYINT DEFAULT 0 COMMENT '0=正常 1=逻辑删除',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_thread_id` (`thread_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='ReAct 线程';

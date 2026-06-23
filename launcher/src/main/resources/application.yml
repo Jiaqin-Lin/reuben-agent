@@ -170,6 +170,53 @@ reuben:
       model: bge-m3
       dimension: 1024
 
+  # ---------------------------------------------------------------------------
+  # Chat — 对话模块配置（systemPrompt / recommendationPrompt 由 yaml 注入，
+  # DeepSeek key 复用全局 spring.ai.deepseek.api-key）
+  # ---------------------------------------------------------------------------
+  chat:
+    agent:
+      systemPrompt: ""
+      maxModelCallsPerRun: 8
+      maxModelCallsPerThread: 40
+      maxToolCallsPerRun: 6
+      maxToolCallsPerThread: 30
+      historyPreviewTurns: 4
+    memory:
+      keepRecentTurns: 4
+      compressionBatchTurns: 6
+      recentTranscriptMaxChars: 2200
+      userPromptMaxChars: 8000
+      answerMaxChars: 16000
+      summaryMaxChars: 1200
+    rag:
+      topK: 5
+      minScore: 0.45
+      charBudget: 3000
+      maxEvidenceCount: 6
+      rerankEnabled: false
+    recommendation:
+      enabled: true
+      timeoutMs: 3000
+      maxCount: 3
+      prompt: ""
+    tavily:
+      baseUrl: https://api.tavily.com
+      apiKey: ${TAVILY_API_KEY:}
+      topic: general
+      searchDepth: basic
+      maxResults: 5
+      timeoutMs: 8000
+    executor:
+      ragPoolSize: 4
+      memoryPoolSize: 2
+      postProcessPoolSize: 4
+    trace:
+      persistenceEnabled: true
+      benchmarkWindowSize: 100
+    pricing:
+      perKTokenCost: {}
+
 # =============================================================================
 # MyBatis-Plus
 # =============================================================================
