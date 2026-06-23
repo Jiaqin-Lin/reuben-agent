@@ -24,19 +24,11 @@
         </dependency>
         <dependency>
             <groupId>com.reubenagent</groupId>
-            <artifactId>reuben-agent-business-agent</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.reubenagent</groupId>
             <artifactId>reuben-agent-business-auth</artifactId>
         </dependency>
         <dependency>
             <groupId>com.reubenagent</groupId>
             <artifactId>reuben-agent-business-chat</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>com.reubenagent</groupId>
-            <artifactId>reuben-agent-business-memory</artifactId>
         </dependency>
         <dependency>
             <groupId>com.reubenagent</groupId>

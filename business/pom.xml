@@ -15,11 +15,9 @@
     <description>Business modules parent</description>
 
     <modules>
-        <module>agent</module>
         <module>auth</module>
         <module>chat</module>
         <module>document</module>
-        <module>memory</module>
         <module>rag</module>
     </modules>
 

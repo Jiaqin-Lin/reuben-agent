@@ -12,10 +12,10 @@
 
     <artifactId>reuben-agent-business-chat</artifactId>
     <packaging>jar</packaging>
-    <description>Chat &amp; conversation module</description>
+    <description>Chat module — session, agent orchestration, conversation memory</description>
 
     <dependencies>
-        <!-- Spring AI -->
+        <!-- Spring AI (ChatModel, EmbeddingModel, streaming) -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>

@@ -7,7 +7,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * reuben-agent 启动入口。
  *
  * <p>{@code scanBasePackages = "com.reubenagent"} 覆盖：
- * common / framework / document / agent / auth / chat / memory / rag</p>
+ * common / framework / document / rag / chat / auth</p>
  *
  * <h3>启动方式</h3>
  * <pre>

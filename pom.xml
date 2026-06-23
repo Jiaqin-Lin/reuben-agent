@@ -106,11 +106,6 @@
             </dependency>
             <dependency>
                 <groupId>com.reubenagent</groupId>
-                <artifactId>reuben-agent-business-agent</artifactId>
-                <version>${revision}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.reubenagent</groupId>
                 <artifactId>reuben-agent-business-auth</artifactId>
                 <version>${revision}</version>
             </dependency>
@@ -122,11 +117,6 @@
             <dependency>
                 <groupId>com.reubenagent</groupId>
                 <artifactId>reuben-agent-business-document</artifactId>
-                <version>${revision}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.reubenagent</groupId>
-                <artifactId>reuben-agent-business-memory</artifactId>
                 <version>${revision}</version>
             </dependency>
             <dependency>
