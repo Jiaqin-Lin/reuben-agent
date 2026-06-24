@@ -186,34 +186,34 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 2 — SSE 流式地基 + 运行时任务表  `[ ]`
+## Phase 2 — SSE 流式地基 + 运行时任务表  `[x]`
 
 **产出**：流式回答的骨架管线（不含具体执行策略），对标 super-agent `BusinessChatService` 的 SSE 生命周期部分（拆分后）。**先让"对话能跑通空回答"**。
 
-- [ ] **2.1 事件模型与序列化**
-  - [ ] `ChatStreamEvent`（record）：`type`(text/thinking/status/error/reference/recommend/done) / `content` / `conversationId` / `turnId` / `timestamp`
-  - [ ] `ChatStreamEventWriter`（`@Component`）：FastJSON 序列化 SSE event，**序列化失败降级为 status error 事件而非抛异常中断整个会话**（修正 super-agent 问题）
-  - [ ] `SinkEmitHelper`：`synchronized(sink)` 下 emitNext/emitComplete，`FAIL_CANCELLED/TERMINATED` 静默（这是合理的，文档化说明）
-  - [ ] `ChatContextKeys`：`RunnableConfig.context()` 的 string 常量（QUESTION / REFERENCES / TRACE_RECORDER / TASK_INFO / STREAM_SINK）
+- [x] **2.1 事件模型与序列化**
+  - [x] `ChatStreamEvent`（record）：`type`(text/thinking/status/error/reference/recommend/done) / `content` / `conversationId` / `turnId` / `timestamp`
+  - [x] `ChatStreamEventWriter`（`@Component`）：FastJSON 序列化 SSE event，**序列化失败降级为 status error 事件而非抛异常中断整个会话**（修正 super-agent 问题）
+  - [x] `SinkEmitHelper`：`synchronized(sink)` 下 emitNext/emitComplete，`FAIL_CANCELLED/TERMINATED` 静默（这是合理的，文档化说明）
+  - [x] `ChatContextKeys`：`RunnableConfig.context()` 的 string 常量（QUESTION / REFERENCES / TRACE_RECORDER / TASK_INFO / STREAM_SINK）
 
-- [ ] **2.2 运行时任务模型**
-  - [ ] `ChatTaskInfo`（context bag，不可变字段 + `@Builder`）：`conversationId` / `turnId` / `Sinks.Many<String> sink` / `RunnableConfig` / `ChatTraceRecorder traceRecorder` / `StringBuffer answerBuffer` / `AtomicBoolean finalized` / `Disposable` 列表
-  - [ ] `ChatRuntimeRegistry`：`ConcurrentHashMap<String, ChatTaskInfo>`，只提供 `register` / `get` / `remove(conversationId, expected)`（**不实现单 arg remove**，修正 super-agent 问题 11）+ `interrupt(conversationId)`
-  - [ ] `ChatLeaseService`（Redis 租约）：`tryAcquire(conversationId)` / `renew` / `release`，TTL 来自配置；获取失败抛 `ChatException(SESSION_RUNNING)`
+- [x] **2.2 运行时任务模型**
+  - [x] `ChatTaskInfo`（context bag，不可变字段 + `@Builder`）：`conversationId` / `turnId` / `Sinks.Many<String> sink` / `RunnableConfig` / `ChatTraceRecorder traceRecorder` / `StringBuffer answerBuffer` / `AtomicBoolean finalized` / `Disposable` 列表
+  - [x] `ChatRuntimeRegistry`：`ConcurrentHashMap<String, ChatTaskInfo>`，只提供 `register` / `get` / `remove(conversationId, expected)`（**不实现单 arg remove**，修正 super-agent 问题 11）+ `interrupt(conversationId)`
+  - [x] `ChatLeaseService`（Redis 租约）：`tryAcquire(conversationId)` / `renew` / `release`，TTL 来自配置；获取失败抛 `ChatException(SESSION_RUNNING)`
 
-- [ ] **2.3 流式编排骨架** `ChatStreamOrchestrator`（`@Service @AllArgsConstructor @Slf4j`）
-  - [ ] `openStream(ChatStreamRequest) → Flux<String>` 主流程：
+- [x] **2.3 流式编排骨架** `ChatStreamOrchestrator`（`@Service @AllArgsConstructor @Slf4j`）
+  - [x] `openStream(ChatStreamRequest) → Flux<String>` 主流程：
     1. 解析 `StreamLaunchPlan`（强类型：question/conversationId/chatMode/selectedDocumentId/leaseToken）
     2. `leaseService.tryAcquire` —— 失败直接返回错误事件 Flux（不抛到 Controller）
     3. `bootstrapConversation`：建 turn 行（RUNNING）+ 建 `ChatTaskInfo` + 注册 registry + 绑定 sink
     4. `activateGeneration`：租约续期定时器 + 订阅 executor 产出
     5. 订阅 `executor.execute(taskInfo)`：`emitModelChunk` → 累积 answerBuffer；完成走 `finalize`
-  - [ ] **`finalize(ChatTaskInfo, ChatTurnStatus, errorMessage)` 单方法**（修正 super-agent 问题 4）：CAS `finalized` 幂等 → 落 turn 行（reply_content / status / latency / debug_trace）→ trace 落 FINALIZE → release lease → registry.remove(conversationId, taskInfo) → sink.emitComplete。异常 **warn 但不吞**（关键路径，落 trace error）
-  - [ ] `stopStream(conversationId)`：registry.get → interrupt executor → finalize(STOPPED)
-  - [ ] 首字延迟统计：第一个 text 事件记 `firstTokenLatencyMs`，完成记 `totalLatencyMs`
-  - [ ] **此阶段 executor 只接一个 stub `EchoExecutor`**（直接回显问题），让管线可端到端跑通
+  - [x] **`finalize(ChatTaskInfo, ChatTurnStatus, errorMessage)` 单方法**（修正 super-agent 问题 4）：CAS `finalized` 幂等 → 落 turn 行（reply_content / status / latency / debug_trace）→ trace 落 FINALIZE → release lease → registry.remove(conversationId, taskInfo) → sink.emitComplete。异常 **warn 但不吞**（关键路径，落 trace error）
+  - [x] `stopStream(conversationId)`：registry.get → interrupt executor → finalize(STOPPED)
+  - [x] 首字延迟统计：第一个 text 事件记 `firstTokenLatencyMs`，完成记 `totalLatencyMs`
+  - [x] **此阶段 executor 只接一个 stub `EchoExecutor`**（直接回显问题），让管线可端到端跑通
 
-- [ ] **2.4 验证**：本地起服务，`POST /api/chat/stream` 能收到 SSE 事件流（even if echo），停止接口能中断。
+- [x] **2.4 验证**：本地起服务，`POST /api/chat/stream` 能收到 SSE 事件流（even if echo），停止接口能中断。
 
 
 ---

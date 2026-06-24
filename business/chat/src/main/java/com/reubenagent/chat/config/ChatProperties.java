@@ -24,6 +24,7 @@ public class ChatProperties {
     private Executor executor = new Executor();
     private Trace trace = new Trace();
     private Pricing pricing = new Pricing();
+    private Lease lease = new Lease();
 
     // ============ Agent ============
 
@@ -134,5 +135,13 @@ public class ChatProperties {
     public static class Pricing {
         /** key = model 名，value = 每千 token 美元 */
         private java.util.Map<String, Double> perKTokenCost = new java.util.HashMap<>();
+    }
+
+    // ============ Lease（会话执行租约）============
+
+    @Data
+    public static class Lease {
+        /** 租约 TTL 秒 */
+        private Integer ttlSeconds = 60;
     }
 }
