@@ -218,31 +218,31 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 3 — 可观测 ChatModel + Prompt 模板  `[ ]`
+## Phase 3 — 可观测 ChatModel + Prompt 模板  `[x]`
 
 **产出**：带 token/成本/耗时追踪的 LLM 调用封装 + 模板服务。对标 super-agent `ObservedChatModelService` + `PromptTemplateService`。
 
-- [ ] **3.1 `ChatPromptTemplateService`**
-  - [ ] 加载 `business/chat/src/main/resources/prompt/*.st`，`ConcurrentHashMap` 缓存，`<placeholder>` 渲染（用 Spring AI `StTemplateRenderer`）
-  - [ ] `render(name, vars)`，加载失败抛 `ChatException(PROMPT_LOAD_FAILED)`（不抛 `IllegalStateException`）
-  - [ ] `ChatPromptNames` 常量类
+- [x] **3.1 `ChatPromptTemplateService`**
+  - [x] 加载 `business/chat/src/main/resources/prompt/*.st`，`ConcurrentHashMap` 缓存，`<placeholder>` 渲染（用 Spring AI `StTemplateRenderer`）
+  - [x] `render(name, vars)`，加载失败抛 `ChatException(PROMPT_LOAD_FAILED)`（不抛 `IllegalStateException`）
+  - [x] `ChatPromptNames` 常量类
 
-- [ ] **3.2 追踪模型**（`model/debug/`）
-  - [ ] `ChatDebugTrace`：rewriteQuestion / agentQuestion / retrievalResults / toolTraces / modelUsageTraces / limitStats / historySummary
-  - [ ] `ChatModelUsageTrace`：stageName / provider / model / promptTokens / completionTokens / totalTokens / estimatedCost / durationMs / **`ChatModelCallStatus` 枚举**
-  - [ ] `ChatToolTrace`：toolName / args / result / status(`ChatToolStatus`) / durationMs / error
-  - [ ] `ChatLimitStats`：modelCalls / toolCalls / 阈值
+- [x] **3.2 追踪模型**（`model/debug/`）
+  - [x] `ChatDebugTrace`：rewriteQuestion / agentQuestion / retrievalResults / toolTraces / modelUsageTraces / limitStats / historySummary
+  - [x] `ChatModelUsageTrace`：stageName / provider / model / promptTokens / completionTokens / totalTokens / estimatedCost / durationMs / **`ChatModelCallStatus` 枚举**
+  - [x] `ChatToolTrace`：toolName / args / result / status(`ChatToolStatus`) / durationMs / error
+  - [x] `ChatLimitStats`：modelCalls / toolCalls / 阈值
 
-- [ ] **3.3 `ObservedChatModelService`**（`@Service @AllArgsConstructor`）
-  - [ ] 注入 `@Qualifier("deepSeekChatModel") ChatModel`（主），`ObjectProvider<ChatModel>` 备选厂商
-  - [ ] `callText(stageName, prompt, options) → String`（阻塞）+ `streamText(stageName, prompt, options) → Flux<String>`
-  - [ ] 每次调用建 `ChatModelUsageTrace`，从 `ChatResponse.metadata.usage()` 取 token（修正 super-agent 字符串识别 provider——provider 由注入的 ChatModel 实现类名一次解析并缓存，不每次匹配）
-  - [ ] `estimateCost`：按配置 `ChatProperties.Pricing`（model → 单价）查表，未配置返回 null（**不硬编码 qwen-plus/deepseek 价格**）
-  - [ ] `streamText` 在 `doFinally`（覆盖 cancel/complete/error）落 trace，修正 super-agent cancel 丢 trace 问题
-  - [ ] 失败：trace 状态 FAILED + 抛 `ChatException(MODEL_CALL_FAILED, stageName, cause)`
+- [x] **3.3 `ObservedChatModelService`**（`@Service @AllArgsConstructor`）
+  - [x] 注入 `@Qualifier("deepSeekChatModel") ChatModel`（主），`ObjectProvider<ChatModel>` 备选厂商
+  - [x] `callText(stageName, prompt, options) → String`（阻塞）+ `streamText(stageName, prompt, options) → Flux<String>`
+  - [x] 每次调用建 `ChatModelUsageTrace`，从 `ChatResponse.metadata.usage()` 取 token（修正 super-agent 字符串识别 provider——provider 由注入的 ChatModel 实现类名一次解析并缓存，不每次匹配）
+  - [x] `estimateCost`：按配置 `ChatProperties.Pricing`（model → 单价）查表，未配置返回 null（**不硬编码 qwen-plus/deepseek 价格**）
+  - [x] `streamText` 在 `doFinally`（覆盖 cancel/complete/error）落 trace，修正 super-agent cancel 丢 trace 问题
+  - [x] 失败：trace 状态 FAILED + 抛 `ChatException(MODEL_CALL_FAILED, stageName, cause)`
 
-- [ ] **3.4 Prompt 模板文件**（先建 Phase 3/4/5/6/9 要用的）
-  - [ ] `chat-query-rewrite.st` / `conversation-summary-merge.st` / `conversation-summary-system.st` / `rag-answer-system.st` / `rag-answer-user.st` / `agent-question.st` / `recommendation-user.st` / `clarification.st`
+- [x] **3.4 Prompt 模板文件**（先建 Phase 3/4/5/6/9 要用的）
+  - [x] `chat-query-rewrite.st` / `conversation-summary-merge.st` / `conversation-summary-system.st` / `rag-answer-system.st` / `rag-answer-user.st` / `agent-question.st` / `recommendation-user.st` / `clarification.st`
 
 
 ---
