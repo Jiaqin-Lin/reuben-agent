@@ -163,25 +163,25 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 1 — 会话与轮次持久化（session）  `[ ]`
+## Phase 1 — 会话与轮次持久化（session）  `[x]`
 
 **产出**：会话/轮次的 CRUD 服务，后续编排与记忆都建立在它之上。对标 super-agent `ConversationArchiveStore` / `MybatisConversationArchiveStore`。
 
-- [ ] **1.1 Store 接口与记录**
-  - [ ] `ChatArchiveStore` 接口：`startConversation` / `completeTurn` / `getConversation` / `listConversations(分页)` / `listRecentTurns(conversationId, limit)` / `deleteConversation` / `countTurns`
-  - [ ] 记录类型：`ConversationArchiveRecord` / `TurnArchiveRecord` / `ConversationRemovalResult` / `ConversationArchivePage`（用 record 或 `@Builder` DTO）
-- [ ] **1.2 MyBatis 实现** `ChatArchiveStoreImpl`（`@Repository @AllArgsConstructor`）
-  - [ ] 会话 upsert：按 `conversation_id` 唯一约束，先 insert，冲突走 update `session_status`（用 `LambdaQueryWrapper` + 单事务，避免 super-agent 的 select-then-insert 竞态——依赖唯一索引 + 捕获 `DuplicateKeyException` 重试一次）
-  - [ ] 轮次完成：`updateById` 只更非 null 字段（builder 精准设置），不重写整个 JSON 列
-  - [ ] 列表分页：复用通用 `PageVo`，过滤条件 `keyword`/`chatMode`/`turnStatus` 用 `LambdaQueryWrapper`，**不拼裸 SQL 片段**（修正 super-agent 问题）
-  - [ ] JSON 列读写：抽 `ChatJsonCodec`（FastJSON），解析失败 **warn + 返回空集合**，不抛 `IllegalStateException`（修正 super-agent 问题 5）
-- [ ] **1.3 `ChatSessionService`**（业务编排层，`IChatSessionService` + impl）
-  - [ ] `createConversation(ChatMode, selectedDocumentId)` → 生成 conversationId（雪花或 UUID），落库返回
-  - [ ] `getConversationDetail(conversationId)` → 装配 `ConversationView`（最新一轮、轮次数、状态、记忆摘要引用）
-  - [ ] `listConversations(ChatSessionListDto)` → 分页（DTO 强类型：`keyword String` / `chatMode Integer` / `turnStatus Integer` / `pageNo Integer` / `pageSize Integer` + `@Min` 校验）
-  - [ ] `deleteConversation(conversationId)` → 软删 conversation + 关联 turn（`is_deleted`），单事务
-  - [ ] `renameConversation` —— **新增能力**（super-agent 没有，补齐：LLM 自动生成标题 + 手动改名接口）
-- [ ] **1.4 文档选项查询**：`listDocumentOptions()` → 复用 document 模块（按类型注入 `IDocumentManageService` 或新增轻量查询），返回 `KnowledgeDocumentOptionVo` 列表
+- [x] **1.1 Store 接口与记录**
+  - [x] `ChatArchiveStore` 接口：`startConversation` / `completeTurn` / `getConversation` / `listConversations(分页)` / `listRecentTurns(conversationId, limit)` / `deleteConversation` / `countTurns`
+  - [x] 记录类型：`ConversationArchiveRecord` / `TurnArchiveRecord` / `ConversationRemovalResult` / `ConversationArchivePage`（用 record 或 `@Builder` DTO）
+- [x] **1.2 MyBatis 实现** `ChatArchiveStoreImpl`（`@Repository @AllArgsConstructor`）
+  - [x] 会话 upsert：按 `conversation_id` 唯一约束，先 insert，冲突走 update `session_status`（用 `LambdaQueryWrapper` + 单事务，避免 super-agent 的 select-then-insert 竞态——依赖唯一索引 + 捕获 `DuplicateKeyException` 重试一次）
+  - [x] 轮次完成：`updateById` 只更非 null 字段（builder 精准设置），不重写整个 JSON 列
+  - [x] 列表分页：复用通用 `PageVo`，过滤条件 `keyword`/`chatMode`/`turnStatus` 用 `LambdaQueryWrapper`，**不拼裸 SQL 片段**（修正 super-agent 问题）
+  - [x] JSON 列读写：抽 `ChatJsonCodec`（FastJSON），解析失败 **warn + 返回空集合**，不抛 `IllegalStateException`（修正 super-agent 问题 5）
+- [x] **1.3 `ChatSessionService`**（业务编排层，`IChatSessionService` + impl）
+  - [x] `createConversation(ChatMode, selectedDocumentId)` → 生成 conversationId（雪花或 UUID），落库返回
+  - [x] `getConversationDetail(conversationId)` → 装配 `ConversationView`（最新一轮、轮次数、状态、记忆摘要引用）
+  - [x] `listConversations(ChatSessionListDto)` → 分页（DTO 强类型：`keyword String` / `chatMode Integer` / `turnStatus Integer` / `pageNo Integer` / `pageSize Integer` + `@Min` 校验）
+  - [x] `deleteConversation(conversationId)` → 软删 conversation + 关联 turn（`is_deleted`），单事务
+  - [x] `renameConversation` —— **新增能力**（super-agent 没有，补齐：LLM 自动生成标题 + 手动改名接口）
+- [x] **1.4 文档选项查询**：`listDocumentOptions()` → 复用 document 模块（按类型注入 `IDocumentManageService` 或新增轻量查询），返回 `KnowledgeDocumentOptionVo` 列表
 
 
 ---

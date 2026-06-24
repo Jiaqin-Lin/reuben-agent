@@ -46,6 +46,17 @@
         </dependency>
 
         <!-- ===================================================================== -->
+        <!-- compile-only 跨模块引用：chat 复用 document 的 VO/查询接口，            -->
+        <!-- 但不引入编译期运行依赖（由 launcher 聚合）。                            -->
+        <!-- ===================================================================== -->
+        <dependency>
+            <groupId>com.reubenagent</groupId>
+            <artifactId>reuben-agent-business-document</artifactId>
+            <version>${revision}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- ===================================================================== -->
         <!-- Test Dependencies                                                     -->
         <!-- ===================================================================== -->
         <dependency>
