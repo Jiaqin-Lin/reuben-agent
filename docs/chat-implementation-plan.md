@@ -313,25 +313,27 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 **产出**：把问题检索文档证据 → 组装 prompt → 流式生成带引用的回答。对标 super-agent `RagChatExecutor` + `RagRetrievalEngine` + `RagPromptAssemblyService`。**这是与 reuben-agent 已有 rag 模块对接的核心**。
 
-- [ ] **6.1 检索适配层**
-  - [ ] `ChatRagRetrievalAdapter`（`@Service`）：按类型注入 `IRagRetrievalService`，把 `ChatRewriteResult.subQuestions` 逐个转 `RagRetrieveRequest`（query + topK + filterFields=documentId），聚合 `RagRetrieveResponse`
-  - [ ] **复用 reuben-agent rag 的全部能力**（改写/双通道/RRF/父块提升/rerank 已在 rag 模块），chat 侧不再实现检索引擎（修正 super-agent 在 chat 模块重造 RagRetrievalEngine 的问题）
-  - [ ] 检索结果映射为 `ChatRetrievalResult`（含 source=vector/keyword/hybrid、score、documentId、sectionPath、chunkText 预览）
-  - [ ] 证据门控：score 阈值 + 数量 budget，来自 `ChatProperties.Rag`
-  - [ ] 检索过程落 `reuben_agent_chat_retrieval_result` + `reuben_agent_chat_channel_execution`（via `ChatRetrievalObserveStore`）
+> **本地无 Docker 待测项**：6.1 的检索链路依赖 rag 模块（向量库 / 关键词库需 ES + PGVector），本地无 Docker 环境无法端到端跑通。Phase 6 代码已编译通过（`mvn -pl business/chat -am clean compile`），运行期联调待用户在带中间件的机器验证。
 
-- [ ] **6.2 Prompt 组装** `ChatRagPromptAssemblyService`
-  - [ ] 组装 system（rag-answer-system.st：角色 + 引用规范 + 拒答约束）+ user（rag-answer-user.st：context 证据块 + recent transcript + question）
-  - [ ] 证据块裁剪到 char budget，每块带 `[1] documentName / sectionPath` 标记供引用映射
-  - [ ] 历史 transcript 用 `ChatMemoryContext.answerRecentTranscript`（只取答案摘要，省 token）
+- [x] **6.1 检索适配层**
+  - [x] `ChatRagRetrievalAdapter`（`@Service`）：按类型注入 `IRagRetrievalService`，把 `ChatRewriteResult.subQuestions` 逐个转 `RagRetrieveRequest`（query + topK + filterFields=documentId），聚合 `RagRetrieveResponse`
+  - [x] **复用 reuben-agent rag 的全部能力**（改写/双通道/RRF/父块提升/rerank 已在 rag 模块），chat 侧不再实现检索引擎（修正 super-agent 在 chat 模块重造 RagRetrievalEngine 的问题）
+  - [x] 检索结果映射为 `ChatRetrievalResult`（含 source=vector/keyword/hybrid、score、documentId、sectionPath、chunkText 预览）
+  - [x] 证据门控：score 阈值 + 数量 budget，来自 `ChatProperties.Rag`
+  - [x] 检索过程落 `reuben_agent_chat_retrieval_result` + `reuben_agent_chat_channel_execution`（via `ChatRetrievalObserveStore`）—— Phase 6 提供 noop 占位 + probe 接口，Phase 8 接入 MyBatis 落库
 
-- [ ] **6.3 `RagAnswerExecutor implements ConversationExecutor`**
-  - [ ] `mode() = RETRIEVAL`（同时被 GRAPH_THEN_EVIDENCE 复用，先做结构定位缩小 filter 再走本 executor）
-  - [ ] `execute(ChatTaskInfo) → Flux<String>`：adapter 检索 → 组装 prompt → `observedChatModelService.streamText` → emit text chunk → 完成时把引用 `SearchReference` 列表 emit 为 reference 事件 + 落 turn.source_snapshot_list
-  - [ ] 无证据命中：emit 拒答文案（来自模板），落 trace evidence_budget=0
-  - [ ] 超时/失败：emit error 事件 + 抛 `ChatException(RETRIEVE_FAILED)` 让 orchestrator finalize
+- [x] **6.2 Prompt 组装** `ChatRagPromptAssemblyService`
+  - [x] 组装 system（rag-answer-system.st：角色 + 引用规范 + 拒答约束）+ user（rag-answer-user.st：context 证据块 + recent transcript + question）
+  - [x] 证据块裁剪到 char budget，每块带 `[1] documentName / sectionPath` 标记供引用映射
+  - [x] 历史 transcript 用 `ChatMemoryContext.answerRecentTranscript`（只取答案摘要，省 token）—— 从 `ConversationExecutionPlan.recentTranscript` 读，组装为承接上下文块注入 user prompt
 
-- [ ] **6.4 引用映射** `SearchReferenceMapper`：把 RetrievalResult → `SearchReference`（统一引用模型，含 documentName/sectionPath/score/sourceType，**移除 super-agent 里硬编码的 `sourceType="WEB"`/`toolName="tavily_search"`**——区分 document/web 由字段决定而非构造器硬塞）
+- [x] **6.3 `RagAnswerExecutor implements ConversationExecutor`**
+  - [x] `mode() = RETRIEVAL`（同时被 GRAPH_THEN_EVIDENCE 复用，先做结构定位缩小 filter 再走本 executor）
+  - [x] `execute(ChatTaskInfo) → Flux<String>`：adapter 检索 → 组装 prompt → `observedChatModelService.streamText` → emit text chunk → 完成时把引用 `SearchReference` 列表 emit 为 reference 事件 + 落 turn.source_snapshot_list
+  - [x] 无证据命中：emit 拒答文案（来自模板），落 trace evidence_budget=0
+  - [x] 超时/失败：emit error 事件 + 抛 `ChatException(RETRIEVE_FAILED)` 让 orchestrator finalize
+
+- [x] **6.4 引用映射** `SearchReferenceMapper`：把 RetrievalResult → `SearchReference`（统一引用模型，含 documentName/sectionPath/score/sourceType，**移除 super-agent 里硬编码的 `sourceType="WEB"`/`toolName="tavily_search"`**——区分 document/web 由字段决定而非构造器硬塞）
 
 
 ---
