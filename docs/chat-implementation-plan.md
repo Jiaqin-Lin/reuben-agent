@@ -376,6 +376,29 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 **产出**：把 Phase 6/7 的 executor 接入分发，补齐其余 executor，并把每轮执行全链路落库可观测。对标 super-agent `ConversationExecutorRegistry` + 5 executor + Trace Recorder/Store + `StageBenchmarkService`。
 
+> ### ⚠️ Phase 5/6/7 端到端联调遗留项（2026-06-26 验证后登记，Phase 8 一并处理）
+>
+> **已修（本次联调）**：
+> - `ChatPreparationOrchestrator.modeBranch` NPE —— `Map.of(...)` 不允许 null value，`selectedDocumentId` 在 OPEN_CHAT/AUTO 无文档时为 null → 改 `HashMap`。
+> - `ChatProperties.Rag.minScore` 0.45→0.0 —— rag 模块返回 RRF 融合分（~0.016）非 cosine，0.45 把所有证据挡掉。
+> - `ChatProperties.Orchestration.clarifyTopScoreDiff` 3.0→0.001、`clarifyConfidenceThreshold` 0.55→0.45 —— RRF 分量级 vs super-agent n-gram 分量级错位，原值让 AUTO_DOCUMENT 永远走 CLARIFICATION。
+> - `ChatStreamOrchestrator.finalize` 落 turn 时漏写 `sourceSnapshotList` / `toolTraceList` —— 补 `jsonCodec.toJson(references)` / `toJson(thinkingSteps)`。
+> - `ReactAgentExecutor` 只透传 `AGENT_MODEL_STREAMING`，丢 `AGENT_MODEL_FINISHED`（非流式兜底时最终答案被吞）—— 补 FINISHED 过滤。
+>
+> **未修（Phase 8 处理）**：
+> - [ ] `ChatPreparationOrchestrator` / `ChatQueryRewriteService` 用手写构造器，应改 `@AllArgsConstructor`（CLAUDE.md §6）。
+> - [ ] `ChatPreparationOrchestrator.ModeBranch` 是 mutable bag + 工厂方法，应改 `@Builder` record（CLAUDE.md §6/§8）。
+> - [ ] `ChatPreparationOrchestrator.decideNavigation` 结构定位关键词（"第几/哪一节/目录/结构/章节"）仍 inline，与类 JavaDoc 声明"外置到 ChatIntentHints"不符 —— 移到 `ChatIntentHints`。
+> - [ ] `RagAnswerExecutor` 阻塞检索在 `Flux.defer` 里未 `subscribeOn(boundedElastic)`（当前靠 orchestrator 上游 publishOn 不阻塞 Netty，但不如 super-agent 显式）—— 加 `Mono.fromCallable(...).subscribeOn(boundedElastic).flatMapMany(...)`。
+> - [ ] `ReactAgentExecutor.ensureToolTracesList` 每次新建 list 注入 metadata，`TavilySearchTool.registerTrace` 写入后无人消费（`ChatTaskInfo` 无 `toolTraces` 字段）—— 要么接 `ChatTaskInfo` + finalize 持久化，要么删掉 misleading 的 registerTrace 机制。
+> - [ ] `ChatRagRetrievalAdapter` 通道类型恒为 `"hybrid"`（rag 模块返回融合结果不暴露 per-channel），`reuben_agent_chat_channel_execution` 永远只有一行 —— 若要 per-channel 可观测，需 rag 侧响应携带 channel 元数据。
+> - [ ] `ChatQueryRewriteService.rewrite` 调 `callText` 未传 `traceRecorder`，改写 LLM 调用的 model-usage trace 丢失。
+> - [ ] `routeKnowledge` 的 `docNames` map 声明后从不填充，`RouteCandidate.documentName` 恒 null（clarification 候选名回退成数字 documentId）。
+> - [ ] `ChatPreparationOrchestrator` 仍剩两处 `Map.of(...)`（INTENT/MEMORY stage snapshot）含 boolean/可能 null 风险，统一改 `HashMap`。
+> - [ ] `DocumentNavigationAction` 的 `LOCATE_ONLY` / `REJECT` 枚举值从未产出（decideNavigation 只产 DIRECT_RETRIEVAL / LOCATE_THEN_RETRIEVE）—— 要么实现要么删枚举值。
+> - [ ] `TimeSensitiveQueryHelper` / `ReactAgentExecutor` 的 `@Slf4j` 声明未使用（anti-pattern #9）。
+> - [ ] 现网联调环境：pgvector + ES 索引在本机曾被卷重置（chunk 表有数据但 embedding 0 条），靠重新 confirm 策略触发 index-build 重建。**Phase 8 集成测试前确认索引完整性**，或在 `ChatDockerIntegrationTest` 里自带上传→索引→问答的完整 fixture。
+
 - [ ] **8.1 Executor 接口与注册**
   - [ ] `ConversationExecutor` 接口：`ExecutionMode mode()` + `Flux<String> execute(ChatTaskInfo)`
   - [ ] `ConversationExecutorRegistry`：`@Autowired List<ConversationExecutor>` → `EnumMap`，`get(mode)` 缺失抛 `ChatException(EXECUTOR_NOT_FOUND)`（不抛 `IllegalStateException`）

@@ -142,10 +142,11 @@ public class ChatPreparationOrchestrator {
                 : traceRecorder.startStage(ChatTraceStageCode.ROUTE, "route", "模式路由", null);
         ModeBranch branch = doModeBranch(plan, rewrite, traceRecorder);
         if (traceRecorder != null) {
-            traceRecorder.completeStage(routeStage, "路由完成", Map.of(
-                    "executionMode", branch.executionMode.name(),
-                    "selectedDocumentId", branch.selectedDocumentId,
-                    "isClarification", branch.executionMode == ExecutionMode.CLARIFICATION));
+            Map<String, Object> snapshot = new HashMap<>();
+            snapshot.put("executionMode", branch.executionMode.name());
+            snapshot.put("selectedDocumentId", branch.selectedDocumentId);
+            snapshot.put("isClarification", branch.executionMode == ExecutionMode.CLARIFICATION);
+            traceRecorder.completeStage(routeStage, "路由完成", snapshot);
         }
         return branch;
     }

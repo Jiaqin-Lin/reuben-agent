@@ -64,6 +64,7 @@ public class ChatStreamOrchestrator {
     private final UidGenerator uidGenerator;
     private final ChatTraceStageStore traceStageStore;
     private final ChatPreparationOrchestrator preparationOrchestrator;
+    private final com.reubenagent.chat.support.ChatJsonCodec jsonCodec;
 
     /**
      * 开启流式回答主流程。
@@ -312,6 +313,8 @@ public class ChatStreamOrchestrator {
                     .turnStatus(status.getCode())
                     .executionMode(resolveFinalExecutionMode(taskInfo))
                     .finishNote(status == ChatTurnStatus.FAILED ? errorMessage : "")
+                    .sourceSnapshotList(jsonCodec.toJson(taskInfo.getReferences()))
+                    .toolTraceList(jsonCodec.toJson(taskInfo.getThinkingSteps()))
                     .firstTokenLatencyMs(toNullable(taskInfo.getFirstTokenLatencyMs().get()))
                     .totalLatencyMs(totalLatency)
                     .build();

@@ -191,7 +191,7 @@ reuben:
       summaryMaxChars: 1200
     rag:
       topK: 5
-      minScore: 0.45
+      minScore: 0.0
       charBudget: 3000
       maxEvidenceCount: 6
       rerankEnabled: false

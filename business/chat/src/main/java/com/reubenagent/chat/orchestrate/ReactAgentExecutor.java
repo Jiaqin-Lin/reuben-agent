@@ -121,7 +121,8 @@ public class ReactAgentExecutor implements ConversationExecutor {
             return agentStream
                     .filter(node -> node instanceof StreamingOutput<?>)
                     .map(node -> (StreamingOutput<?>) node)
-                    .filter(so -> so.getOutputType() == OutputType.AGENT_MODEL_STREAMING)
+                    .filter(so -> so.getOutputType() == OutputType.AGENT_MODEL_STREAMING
+                            || so.getOutputType() == OutputType.AGENT_MODEL_FINISHED)
                     .map(StreamingOutput::message)
                     .filter(AssistantMessage.class::isInstance)
                     .map(AssistantMessage.class::cast)

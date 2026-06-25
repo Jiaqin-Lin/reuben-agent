@@ -70,8 +70,8 @@ public class ChatProperties {
     public static class Rag {
         /** 单子问题检索 topK */
         private Integer topK = 5;
-        /** 证据分数阈值 */
-        private Double minScore = 0.45;
+        /** 证据 RRF 分数阈值（rag 模块返回 RRF 融合分 ~0.016，非 cosine 相似度，故阈值取小值） */
+        private Double minScore = 0.0;
         /** 证据字符预算 */
         private Integer charBudget = 3000;
         /** 证据数量上限 */
@@ -172,9 +172,9 @@ public class ChatProperties {
     @Data
     public static class Orchestration {
         /** AUTO_DOCUMENT 模式下，知识路由置信度低于此值 → CLARIFICATION */
-        private Double clarifyConfidenceThreshold = 0.55;
-        /** 候选文档 top1 与 top2 评分差 ≤ 此值视为模糊 → CLARIFICATION */
-        private Double clarifyTopScoreDiff = 3.0;
+        private Double clarifyConfidenceThreshold = 0.45;
+        /** 候选文档 top1 与 top2 评分差 ≤ 此值视为模糊 → CLARIFICATION（RRF 分量级 ~0.001） */
+        private Double clarifyTopScoreDiff = 0.001;
         /** 检索 topK 用于候选文档评分 */
         private Integer routeCandidateTopK = 5;
     }
