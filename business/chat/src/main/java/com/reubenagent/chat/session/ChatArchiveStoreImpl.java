@@ -140,14 +140,15 @@ public class ChatArchiveStoreImpl implements ChatArchiveStore {
         if (conversationId == null) {
             return Collections.emptyList();
         }
-        int safeLimit = Math.max(limit, 1);
         LambdaQueryWrapper<ChatTurn> wrapper = new LambdaQueryWrapper<ChatTurn>()
                 .eq(ChatTurn::getConversationId, conversationId)
                 .in(ChatTurn::getTurnStatus,
                         ChatTurnStatus.COMPLETED.getCode(),
                         ChatTurnStatus.STOPPED.getCode())
-                .orderByDesc(ChatTurn::getId)
-                .last("LIMIT " + safeLimit);
+                .orderByDesc(ChatTurn::getId);
+        if (limit > 0) {
+            wrapper.last("LIMIT " + limit);
+        }
         return turnMapper.selectList(wrapper).stream()
                 .map(this::toTurnRecord)
                 .toList();

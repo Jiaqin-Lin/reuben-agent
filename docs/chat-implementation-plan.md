@@ -247,29 +247,29 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 4 — 对话记忆（memory）  `[ ]`
+## Phase 4 — 对话记忆（memory）  `[x]`
 
 **产出**：短期 recent window + 长期摘要压缩记忆。对标 super-agent `PersistentConversationMemoryService`。
 
-- [ ] **4.1 记忆模型**（`model/memory/`）
-  - [ ] `ChatMemoryContext`：assembledHistory / longTermSummary / recentTranscript / answerRecentTranscript / summaryPayload / coverage / compressionCount
-  - [ ] `ChatSummaryPayload`：summary / conversationGoal / stableFacts / userPreferences / resolvedPoints / pendingQuestions / retrievalHints
+- [x] **4.1 记忆模型**（`model/memory/`）
+  - [x] `ChatMemoryContext`：assembledHistory / longTermSummary / recentTranscript / answerRecentTranscript / summaryPayload / coverage / compressionCount
+  - [x] `ChatSummaryPayload`：summary / conversationGoal / stableFacts / userPreferences / resolvedPoints / pendingQuestions / retrievalHints（`@JSONField` 映射下划线，对齐 prompt 输出结构）
 
-- [ ] **4.2 `IChatMemoryService` + `ChatMemoryServiceImpl`**
-  - [ ] `loadMemoryContext(conversationId, ChatTraceRecorder)`：同步加载 recent window + summary，必要时触发摘要刷新
-  - [ ] `getConversationSummary(conversationId)` / `rebuildConversationSummary(conversationId)` / `deleteConversationSummary(conversationId)`
-  - [ ] `refreshConversationSummaryAsync(conversationId)`：`chatMemoryExecutor` 异步，`ConcurrentHashMap.newKeySet()` 去重并发刷新
-  - [ ] **recent window**：取最近 `keepRecentTurns`(4) 轮 COMPLETED/STOPPED 且 question/answer 非空，渲染为 transcript，裁剪到 `recentTranscriptMaxChars`
-  - [ ] **摘要压缩**：稳定轮次超 `keepRecentTurns` 时，溢出部分按 `compressionBatchTurns`(6) 批量调 LLM 合并入 `ChatSummaryPayload`，存 `reuben_agent_chat_memory_summary`（一 conversation 一行，唯一约束）
-  - [ ] **JSON 解析**：用 `ChatJsonCodec` 容错提取首个平衡花括号（修正 super-agent 贪婪正则问题 14），失败 warn + 返回上一版 summary
-  - [ ] **fallback**：LLM 合并失败走规则拼接 + 关键词提取，**记 warn + 落 trace**（不静默）
-  - [ ] 魔法常量全部进 `ChatProperties.Memory`（修正问题 13）
-  - [ ] `clipText`/`safeText` 统一用 `ChatTexts`（修正问题 15）
+- [x] **4.2 `IChatMemoryService` + `ChatMemoryServiceImpl`**
+  - [x] `loadMemoryContext(conversationId, ChatTraceRecorder)`：同步加载 recent window + summary，必要时触发摘要刷新
+  - [x] `getConversationSummary(conversationId)` / `rebuildConversationSummary(conversationId)` / `deleteConversationSummary(conversationId)`
+  - [x] `refreshConversationSummaryAsync(conversationId)`：`chatMemoryExecutor` 异步，`ConcurrentHashMap.newKeySet()` 去重并发刷新
+  - [x] **recent window**：取最近 `keepRecentTurns`(4) 轮 COMPLETED/STOPPED 且 question/answer 非空，渲染为 transcript，裁剪到 `recentTranscriptMaxChars`
+  - [x] **摘要压缩**：稳定轮次超 `keepRecentTurns` 时，溢出部分按 `compressionBatchTurns`(6) 批量调 LLM 合并入 `ChatSummaryPayload`，存 `reuben_agent_chat_memory_summary`（一 conversation 一行，唯一约束）
+  - [x] **JSON 解析**：用 `ChatJsonCodec` 容错提取首个平衡花括号（修正 super-agent 贪婪正则问题 14），失败 warn + 返回上一版 summary
+  - [x] **fallback**：LLM 合并失败走规则拼接 + 关键词提取，**记 warn + 落 trace**（不静默）
+  - [x] 魔法常量全部进 `ChatProperties.Memory`（修正问题 13）
+  - [x] `clipText`/`safeText` 统一用 `ChatTexts`（修正问题 15）
 
-- [ ] **4.3 ReAct 工作记忆（checkpoint）—— 决策点**
-  - [ ] super-agent 用 Alibaba `MysqlSaver`（`GRAPH_CHECKPOINT`/`GRAPH_THREAD`）。**本期决策**：若 Phase 7 用 Alibaba `ReactAgent`，则沿用其 saver（自建 `ChatCheckpointManager` 包装）；若自实现 ReAct loop，则用自建轻量 `reuben_agent_chat_checkpoint` 表存 message 列表。
-  - [ ] `ChatCheckpointManager`：`get(runnableConfig)` / `list(threadId)` / `clearThread(threadId)`，字段语义对齐（`thread_name` 存 conversationId）
-  - [ ] 清理：删会话时级联清 checkpoint
+- [x] **4.3 ReAct 工作记忆（checkpoint）—— 决策点**
+  - [x] super-agent 用 Alibaba `MysqlSaver`（`GRAPH_CHECKPOINT`/`GRAPH_THREAD`）。**本期决策**：若 Phase 7 用 Alibaba `ReactAgent`，则沿用其 saver（自建 `ChatCheckpointManager` 包装）；若自实现 ReAct loop，则用自建轻量 `reuben_agent_chat_checkpoint` 表存 message 列表。
+  - [x] `ChatCheckpointManager`：`get(runnableConfig)` / `list(threadId)` / `clearThread(threadId)`，字段语义对齐（`thread_name` 存 conversationId）
+  - [x] 清理：删会话时级联清 checkpoint（`ChatSessionServiceImpl.deleteConversation` 调 `ChatCheckpointManager.clearThread` + `IChatMemoryService.deleteConversationSummary`）
 
 
 ---

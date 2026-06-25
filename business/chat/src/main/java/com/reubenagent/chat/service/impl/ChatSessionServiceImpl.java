@@ -9,11 +9,13 @@ import com.reubenagent.chat.enums.ChatSessionStatus;
 import com.reubenagent.chat.enums.ChatTurnStatus;
 import com.reubenagent.chat.exception.ChatException;
 import com.reubenagent.chat.session.ChatArchiveStore;
+import com.reubenagent.chat.session.ChatCheckpointManager;
 import com.reubenagent.chat.session.ConversationArchivePage;
 import com.reubenagent.chat.session.ConversationArchiveRecord;
 import com.reubenagent.chat.session.ChatArchiveStore.ConversationListQuery;
 import com.reubenagent.chat.session.ConversationRemovalResult;
 import com.reubenagent.chat.session.TurnArchiveRecord;
+import com.reubenagent.chat.service.IChatMemoryService;
 import com.reubenagent.chat.service.IChatSessionService;
 import com.reubenagent.chat.vo.ConversationSessionListVo;
 import com.reubenagent.chat.vo.ConversationView;
@@ -22,6 +24,7 @@ import com.reubenagent.common.dto.PageVo;
 import com.reubenagent.framework.uid.UidGenerator;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -43,6 +46,8 @@ public class ChatSessionServiceImpl implements IChatSessionService {
 
     private final ChatArchiveStore archiveStore;
     private final UidGenerator uidGenerator;
+    private final ObjectProvider<ChatCheckpointManager> checkpointManagerProvider;
+    private final ObjectProvider<IChatMemoryService> memoryServiceProvider;
 
     @Override
     public ConversationView createConversation(ChatSessionCreateDto dto) {
@@ -103,8 +108,30 @@ public class ChatSessionServiceImpl implements IChatSessionService {
     @Override
     public void deleteConversation(String conversationId) {
         ConversationRemovalResult result = archiveStore.deleteConversation(conversationId);
+        // 阶段：级联清理 ReAct 检查点 + 长期摘要
+        cascadeClearMemory(conversationId);
         log.info("删除会话 → conversationId={} removed={} turns={}",
                 conversationId, result.isConversationRemoved(), result.getRemovedTurnCount());
+    }
+
+    /** 删除会话后级联清理 checkpoint + memory summary（可选 Bean，缺失跳过）。 */
+    private void cascadeClearMemory(String conversationId) {
+        ChatCheckpointManager checkpointManager = checkpointManagerProvider.getIfAvailable();
+        if (checkpointManager != null) {
+            try {
+                checkpointManager.clearThread(conversationId);
+            } catch (Exception e) {
+                log.warn("清理会话检查点失败 → conversationId={} err={}", conversationId, e.getMessage());
+            }
+        }
+        IChatMemoryService memoryService = memoryServiceProvider.getIfAvailable();
+        if (memoryService != null) {
+            try {
+                memoryService.deleteConversationSummary(conversationId);
+            } catch (Exception e) {
+                log.warn("清理会话长期摘要失败 → conversationId={} err={}", conversationId, e.getMessage());
+            }
+        }
     }
 
     @Override
