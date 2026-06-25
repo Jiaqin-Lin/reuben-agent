@@ -338,29 +338,36 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 7 — ReAct Agent + 联网工具（agent）  `[ ]`
+## Phase 7 — ReAct Agent + 联网工具（agent）  `[x]`
 
 **产出**：开放式对话的 Agent loop（推理→工具调用→观察→…）+ 联网搜索工具。对标 super-agent `ReactAgentExecutor` + `TavilySearchTool` + 拦截器。
 
-- [ ] **7.1 工具定义**
-  - [ ] `TavilySearchTool`（`@Component`）：`search(TavilySearchRequest, ToolContext) → TavilySearchToolResult`，调 Tavily REST `/search`
-  - [ ] `RestClient` 由 `ChatProperties.Tavily` 构造（`@Bean`，可刷新配置走 `@RefreshScope` 或重建——本期静态足够）
-  - [ ] 时间敏感查询增强：`TimeSensitiveQueryHelper`（纯函数，关键词列表外置配置），决定是否注入当前日期/触发联网
-  - [ ] 工具执行：push thinking 事件（"🔍 正在联网搜索"——文案可配，不硬编码）、注册 `ChatToolTrace`、标记 usedTool
-  - [ ] **RAG 检索是否作为 Agent 工具**：super-agent 是把 RAG 做成独立 executor 不给 agent 调。**本期对齐 super-agent 行为**（OPEN_CHAT 走 ReAct+联网，DOCUMENT/AUTO 走 RAG executor），不把 RAG 注册成 tool，避免双路径混乱。留 TODO 注释未来可加 `rag_search` tool。
+> ⚠️ **待测项**（本机无 Docker / 无 Tavily key，端到端运行验证留待夜间用自己电脑跑）：
+> - Tavily 真实联网调用（需配 `chat.tavily.api-key`）
+> - ReAct Agent checkpoint 落 `GRAPH_THREAD`/`GRAPH_CHECKPOINT` 表（需 MySQL 实例）
+> - 多轮工具调用 + `ModelCallLimitHook`/`ToolCallLimitHook` 阈值触发 `END`
+> - SSE 透传 thinking 事件（"🔍 正在联网搜索"）+ 工具 trace 落 `taskInfo.toolTraces`
+> - 时间敏感 query 触发 `freshSearchHint` 注入
 
-- [ ] **7.2 工具注册与拦截器**
-  - [ ] `ChatAgentConfiguration`：注册 tavily `FunctionToolCallback`（name `tavily_search`）
-  - [ ] `TavilyToolInputFallbackInterceptor`：保证 query 非空，fallback 取 `ChatContextKeys.QUESTION`；**用 Optional/哨兵而非 null 控制信号**（修正问题：null 当控制流）
-  - [ ] `ToolRetryInterceptor`（2 次 + jitter backoff）/ `ToolErrorInterceptor`
-  - [ ] **DashScope 兼容拦截器**：DeepSeek 为主，**本期移除** super-agent 的 `DashScopeCompatibilityInterceptor`（555 行、base-url 字符串识别、INFO 全量日志）。若后续接入多厂商，按配置 provider 选拦截器，日志 debug。
+- [x] **7.1 工具定义**
+  - [x] `TavilySearchTool`（`@Component`）：`search(TavilySearchRequest, ToolContext) → TavilySearchToolResult`，调 Tavily REST `/search`
+  - [x] `RestClient` 由 `ChatProperties.Tavily` 构造（`@Bean`，可刷新配置走 `@RefreshScope` 或重建——本期静态足够）
+  - [x] 时间敏感查询增强：`TimeSensitiveQueryHelper`（纯函数，关键词列表外置配置），决定是否注入当前日期/触发联网
+  - [x] 工具执行：push thinking 事件（"🔍 正在联网搜索"——文案可配，不硬编码）、注册 `ChatToolTrace`、标记 usedTool
+  - [x] **RAG 检索是否作为 Agent 工具**：super-agent 是把 RAG 做成独立 executor 不给 agent 调。**本期对齐 super-agent 行为**（OPEN_CHAT 走 ReAct+联网，DOCUMENT/AUTO 走 RAG executor），不把 RAG 注册成 tool，避免双路径混乱。留 TODO 注释未来可加 `rag_search` tool。
 
-- [ ] **7.3 ReAct loop**
-  - [ ] **决策点**：用 Alibaba `spring-ai-alibaba-graph` 的 `ReactAgent.builder()`（与 super-agent 一致，省去手写 loop），还是自实现轻量 ReAct。**本期采用 Alibaba ReactAgent**（功能对齐、减少自实现风险），checkpoint 用其 `MysqlSaver`（Phase 4.3 已包装）。
-  - [ ] `ChatAgentConfiguration.reactAgent` Bean：name `business_chat_agent` / instruction=`ChatProperties.Agent.systemPrompt` / tavily tool / mysqlSaver / `parallelToolExecution(true)` maxParallelTools(4) / `ModelCallLimitHook` + `ToolCallLimitHook`（阈值来自配置）
-  - [ ] `ReactAgentExecutor implements ConversationExecutor`：`mode()=REACT_AGENT`，`reactAgent.stream(agentQuestion, runnableConfig)` → map `NodeOutput`/`StreamingOutput` → emit text；`publishOn(boundedElastic)`；`GraphRunnerException` → `Flux.error(ChatException)`
-  - [ ] agent question 由 `agent-question.st` 用 memory context + 原始 question 组装
-  - [ ] 工具调用过程中 thinking 事件透传到 SSE
+- [x] **7.2 工具注册与拦截器**
+  - [x] `ChatAgentConfiguration`：注册 tavily `FunctionToolCallback`（name `tavily_search`）
+  - [x] `TavilyToolInputFallbackInterceptor`：保证 query 非空，fallback 取 `ChatContextKeys.QUESTION`；**用 Optional/哨兵而非 null 控制信号**（修正问题：null 当控制流）
+  - [x] `ToolRetryInterceptor`（2 次 + jitter backoff）/ `ToolErrorInterceptor`
+  - [x] **DashScope 兼容拦截器**：DeepSeek 为主，**本期移除** super-agent 的 `DashScopeCompatibilityInterceptor`（555 行、base-url 字符串识别、INFO 全量日志）。若后续接入多厂商，按配置 provider 选拦截器，日志 debug。
+
+- [x] **7.3 ReAct loop**
+  - [x] **决策点**：用 Alibaba `spring-ai-alibaba-graph` 的 `ReactAgent.builder()`（与 super-agent 一致，省去手写 loop），还是自实现轻量 ReAct。**本期采用 Alibaba ReactAgent**（功能对齐、减少自实现风险），checkpoint 用其 `MysqlSaver`（Phase 4.3 已包装）。
+  - [x] `ChatAgentConfiguration.reactAgent` Bean：name `business_chat_agent` / instruction=`ChatProperties.Agent.systemPrompt` / tavily tool / mysqlSaver / `parallelToolExecution(true)` maxParallelTools(4) / `ModelCallLimitHook` + `ToolCallLimitHook`（阈值来自配置）
+  - [x] `ReactAgentExecutor implements ConversationExecutor`：`mode()=REACT_AGENT`，`reactAgent.stream(agentQuestion, runnableConfig)` → map `NodeOutput`/`StreamingOutput` → emit text；`publishOn(boundedElastic)`；`GraphRunnerException` → `Flux.error(ChatException)`
+  - [x] agent question 由 `agent-question.st` 用 memory context + 原始 question 组装
+  - [x] 工具调用过程中 thinking 事件透传到 SSE
 
 
 ---

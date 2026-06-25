@@ -25,6 +25,13 @@ public final class ChatContextKeys {
     public static final String SELECTED_DOCUMENT_ID = "chat.selected.document.id";
     public static final String SELECTED_DOCUMENT_NAME = "chat.selected.document.name";
 
+    /** Tavily 工具用：当前 conversationId（注入到 ToolContext） */
+    public static final String CONVERSATION_ID = "chat.conversation.id";
+    /** Tavily 工具用：当前 turnId（注入到 ToolContext） */
+    public static final String TURN_ID = "chat.turn.id";
+    /** Tavily 工具用：累积的 ChatToolTrace 列表（注入到 ToolContext） */
+    public static final String TOOL_TRACES = "chat.tool.traces";
+
     private ChatContextKeys() {
     }
 }
