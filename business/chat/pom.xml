@@ -56,6 +56,19 @@
             <scope>provided</scope>
         </dependency>
 
+        <dependency>
+            <groupId>com.reubenagent</groupId>
+            <artifactId>reuben-agent-business-rag</artifactId>
+            <version>${revision}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- Spring AI OpenAI（OpenAiChatOptions 用于改写参数；DeepSeek starter 已传递 spring-ai-openai，但 provided 范围需显式引入）-->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
+        </dependency>
+
         <!-- ===================================================================== -->
         <!-- Test Dependencies                                                     -->
         <!-- ===================================================================== -->

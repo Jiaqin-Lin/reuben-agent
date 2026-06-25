@@ -274,31 +274,37 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 5 — 查询改写 + 执行模式决策（orchestrate）  `[ ]`
+## Phase 5 — 查询改写 + 执行模式决策（orchestrate）  `[x]`
 
 **产出**：决定"这一轮怎么回答"的大脑。对标 super-agent `ChatQueryRewriteService` + `ChatPreparationOrchestrator`。
 
-- [ ] **5.1 `ChatQueryRewriteService`**
-  - [ ] `rewrite(question, ChatMemoryContext) → ChatRewriteResult`（rewrittenQuery + subQuestions + usedRewrite 标志）
-  - [ ] LLM 改写 + 子问题拆分；规则 fallback（多问号/分号拆分）
-  - [ ] `needsRewrite` / `looksLikeMultiQuestion` 的 char 阈值进配置（修正问题 13），用预编译 `Pattern`
-  - [ ] 失败 warn + 走规则，落 trace（REWRITE stage）
+> **本地无 Docker 待测项**（已编译通过，端到端验证留待有中间件环境的机器）：
+> - `ChatQueryRewriteService` 的 LLM 改写路径（需 DeepSeek API key 与网络）
+> - `ChatPreparationOrchestrator.resolveAutoDocument` 的知识路由（需 RAG 向量索引 + MySQL/Redis）
+> - 落库 trace stage（需 `reuben_agent_chat_trace_stage` 表与 MySQL）
+> 建议晚上回去在有 Docker 的电脑上跑一次端到端 SSE 调用，验证 MEMORY/INTENT/REWRITE/ROUTE 四个 stage 落库。
 
-- [ ] **5.2 导航决策模型**（`model/orchestrate/`）
-  - [ ] `DocumentNavigationDecision` / `DocumentNavigationAction` / `NavigationScopeMode` / `EvidenceSatisfactionResult`
-  - [ ] `ConversationExecutionPlan`：executionMode / rewrittenQuery / subQuestions / selectedDocumentId / clarificationReply / anchors
+- [x] **5.1 `ChatQueryRewriteService`**
+  - [x] `rewrite(question, ChatMemoryContext) → ChatRewriteResult`（rewrittenQuery + subQuestions + usedRewrite 标志）
+  - [x] LLM 改写 + 子问题拆分；规则 fallback（多问号/分号拆分）
+  - [x] `needsRewrite` / `looksLikeMultiQuestion` 的 char 阈值进配置（修正问题 13），用预编译 `Pattern`
+  - [x] 失败 warn + 走规则，落 trace（REWRITE stage）
 
-- [ ] **5.3 `ChatPreparationOrchestrator`**（拆得比 super-agent 小，<400 行）
-  - [ ] 五步：loadMemory → rewriteQuery → modeBranch → navigationDecision → emitPlan
-  - [ ] **modeBranch**：
+- [x] **5.2 导航决策模型**（`model/orchestrate/`）
+  - [x] `DocumentNavigationDecision` / `DocumentNavigationAction` / `NavigationScopeMode` / `EvidenceSatisfactionResult`
+  - [x] `ConversationExecutionPlan`：executionMode / rewrittenQuery / subQuestions / selectedDocumentId / clarificationReply / anchors
+
+- [x] **5.3 `ChatPreparationOrchestrator`**（拆得比 super-agent 小，<400 行）
+  - [x] 五步：loadMemory → rewriteQuery → modeBranch → navigationDecision → emitPlan
+  - [x] **modeBranch**：
     - OPEN_CHAT → REACT_AGENT
     - DOCUMENT → RETRIEVAL（定向该文档检索）
     - AUTO_DOCUMENT → 知识路由选文档，候选不明确且低置信 → CLARIFICATION，否则 RETRIEVAL
-  - [ ] **navigationDecision**（仅 DOCUMENT/AUTO 用）：判断 GRAPH_ONLY（结构定位类问题）/ GRAPH_THEN_EVIDENCE（先定位章节再检索证据）/ RETRIEVAL（直接证据检索）
-  - [ ] `shouldAskClarification` 的 `0.55`/`3` 阈值进配置
-  - [ ] **知识路由**：调用 document 模块（按类型注入知识路由 Bean 或复用 `IRagRetrievalService` 带 filter）做候选文档评分；**不复制 super-agent 的手搓 n-gram 评分**（问题：与 KnowledgeRouteService 重复），直接委托 document 侧
-  - [ ] 关键词 hint 集合（CAPABILITY/OPEN_CHAT/CHITCHAT）外置到配置或常量类，不散落方法体
-  - [ ] 每步落 trace stage（MEMORY/INTENT/REWRITE/ROUTE）
+  - [x] **navigationDecision**（仅 DOCUMENT/AUTO 用）：判断 GRAPH_ONLY（结构定位类问题）/ GRAPH_THEN_EVIDENCE（先定位章节再检索证据）/ RETRIEVAL（直接证据检索）
+  - [x] `shouldAskClarification` 的 `0.55`/`3` 阈值进配置
+  - [x] **知识路由**：调用 document 模块（按类型注入知识路由 Bean 或复用 `IRagRetrievalService` 带 filter）做候选文档评分；**不复制 super-agent 的手搓 n-gram 评分**（问题：与 KnowledgeRouteService 重复），直接委托 document 侧
+  - [x] 关键词 hint 集合（CAPABILITY/OPEN_CHAT/CHITCHAT）外置到配置或常量类，不散落方法体
+  - [x] 每步落 trace stage（MEMORY/INTENT/REWRITE/ROUTE）
 
 
 ---

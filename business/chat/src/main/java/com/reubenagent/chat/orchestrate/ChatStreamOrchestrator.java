@@ -9,6 +9,7 @@ import com.reubenagent.chat.enums.ChatTraceStageCode;
 import com.reubenagent.chat.enums.ChatTurnStatus;
 import com.reubenagent.chat.enums.ExecutionMode;
 import com.reubenagent.chat.exception.ChatException;
+import com.reubenagent.chat.model.orchestrate.ConversationExecutionPlan;
 import com.reubenagent.chat.session.ChatArchiveStore;
 import com.reubenagent.chat.session.ConversationArchiveRecord;
 import com.reubenagent.chat.session.TurnArchiveRecord;
@@ -62,6 +63,7 @@ public class ChatStreamOrchestrator {
     private final ChatProperties properties;
     private final UidGenerator uidGenerator;
     private final ChatTraceStageStore traceStageStore;
+    private final ChatPreparationOrchestrator preparationOrchestrator;
 
     /**
      * 开启流式回答主流程。
@@ -231,9 +233,23 @@ public class ChatStreamOrchestrator {
     private Flux<String> buildExecution(ChatTaskInfo taskInfo) {
         return Flux.defer(() -> {
             emitThinking(taskInfo, "正在分析问题上下文。");
-            // 阶段：Phase 2 stub——mode 固定走 EchoExecutor；Phase 5 接入 prepareExecutionPlan 决策
-            ExecutionMode mode = resolveStubMode(taskInfo.getChatMode());
-            ConversationExecutor executor = executorRegistry.get(mode);
+            ConversationExecutionPlan plan = preparationOrchestrator.prepare(
+                    StreamLaunchPlan.builder()
+                            .question(taskInfo.getQuestion())
+                            .conversationId(taskInfo.getConversationId())
+                            .chatMode(taskInfo.getChatMode())
+                            .selectedDocumentId(taskInfo.getSelectedDocumentId())
+                            .selectedDocumentName(taskInfo.getSelectedDocumentName())
+                            .currentDate(taskInfo.getCurrentDate())
+                            .currentDateText(taskInfo.getCurrentDateText())
+                            .build(),
+                    taskInfo.getTraceRecorder());
+            taskInfo.setExecutionPlan(plan);
+            if (plan.isClarification()) {
+                emitThinking(taskInfo, plan.getClarificationReply() == null ? "需要澄清" : plan.getClarificationReply());
+                return Flux.just(plan.getClarificationReply() == null ? "" : plan.getClarificationReply());
+            }
+            ConversationExecutor executor = executorRegistry.get(plan.getExecutionMode());
             return executor.execute(taskInfo);
         })
                 .publishOn(Schedulers.boundedElastic())
@@ -241,11 +257,6 @@ public class ChatStreamOrchestrator {
                 .doOnError(error -> finalize(taskInfo, ChatTurnStatus.FAILED, errorMessage(error)))
                 .doOnComplete(() -> finalize(taskInfo, ChatTurnStatus.COMPLETED, null))
                 .doOnCancel(() -> finalize(taskInfo, ChatTurnStatus.STOPPED, "客户端已取消请求"));
-    }
-
-    /** Phase 2 桩模式：全部走 REACT_AGENT（EchoExecutor）。Phase 5 由 Orchestrator 决策替换。 */
-    private ExecutionMode resolveStubMode(ChatMode chatMode) {
-        return ExecutionMode.REACT_AGENT;
     }
 
     private void emitModelChunk(ChatTaskInfo taskInfo, String chunk) {
@@ -299,7 +310,7 @@ public class ChatStreamOrchestrator {
             TurnArchiveRecord patch = TurnArchiveRecord.builder()
                     .replyContent(taskInfo.getAnswerBuffer().toString())
                     .turnStatus(status.getCode())
-                    .executionMode(resolveStubMode(taskInfo.getChatMode()).getCode())
+                    .executionMode(resolveFinalExecutionMode(taskInfo))
                     .finishNote(status == ChatTurnStatus.FAILED ? errorMessage : "")
                     .firstTokenLatencyMs(toNullable(taskInfo.getFirstTokenLatencyMs().get()))
                     .totalLatencyMs(totalLatency)
@@ -362,7 +373,7 @@ public class ChatStreamOrchestrator {
             archiveStore.completeTurn(taskInfo.getConversationId(), taskInfo.getTurnId(), TurnArchiveRecord.builder()
                     .replyContent(taskInfo.getAnswerBuffer().toString())
                     .turnStatus(ChatTurnStatus.STOPPED.getCode())
-                    .executionMode(resolveStubMode(taskInfo.getChatMode()).getCode())
+                    .executionMode(resolveFinalExecutionMode(taskInfo))
                     .finishNote(reason)
                     .firstTokenLatencyMs(toNullable(taskInfo.getFirstTokenLatencyMs().get()))
                     .totalLatencyMs(totalLatency)
@@ -417,6 +428,15 @@ public class ChatStreamOrchestrator {
     }
 
     // ======================== 工具 ========================
+
+    /** 落 turn 时取 executionMode：优先 plan，缺失回退 REACT_AGENT（保留 stub 兼容）。 */
+    private Integer resolveFinalExecutionMode(ChatTaskInfo taskInfo) {
+        ConversationExecutionPlan plan = taskInfo.getExecutionPlan();
+        if (plan != null && plan.getExecutionMode() != null) {
+            return plan.getExecutionMode().getCode();
+        }
+        return ExecutionMode.REACT_AGENT.getCode();
+    }
 
     private Flux<String> errorFlux(String message, String conversationId) {
         return Flux.just(eventWriter.error(message, conversationId, null),

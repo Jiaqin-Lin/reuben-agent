@@ -65,3 +65,5 @@ docs/doc-to-test/
 
 ### Frontend static output ###
 launcher/src/main/resources/static/
+
+.claude/settings.local.json

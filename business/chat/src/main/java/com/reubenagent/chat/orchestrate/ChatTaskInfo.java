@@ -1,6 +1,7 @@
 package com.reubenagent.chat.orchestrate;
 
 import com.reubenagent.chat.enums.ChatMode;
+import com.reubenagent.chat.model.orchestrate.ConversationExecutionPlan;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
 import lombok.Builder;
 import lombok.Getter;
@@ -70,6 +71,10 @@ public class ChatTaskInfo {
     @Getter
     private final AtomicBoolean finalized = new AtomicBoolean(false);
 
+    /** 执行计划 —— Phase 5 由 ChatPreparationOrchestrator.prepare 装配，executor 读取 */
+    @Getter
+    private volatile ConversationExecutionPlan executionPlan;
+
     @Builder.Default
     private volatile Disposable disposable = null;
     @Builder.Default
@@ -81,6 +86,11 @@ public class ChatTaskInfo {
 
     public void setLeaseRenewalDisposable(Disposable disposable) {
         this.leaseRenewalDisposable = disposable;
+    }
+
+    /** 写入执行计划（仅 prepare 阶段调用一次）。 */
+    public void setExecutionPlan(ConversationExecutionPlan plan) {
+        this.executionPlan = plan;
     }
 
     /** 标记是否已收尾。 */

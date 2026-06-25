@@ -25,6 +25,8 @@ public class ChatProperties {
     private Trace trace = new Trace();
     private Pricing pricing = new Pricing();
     private Lease lease = new Lease();
+    private Rewrite rewrite = new Rewrite();
+    private Orchestration orchestration = new Orchestration();
 
     // ============ Agent ============
 
@@ -143,5 +145,37 @@ public class ChatProperties {
     public static class Lease {
         /** 租约 TTL 秒 */
         private Integer ttlSeconds = 60;
+    }
+
+    // ============ Rewrite（查询改写）============
+
+    @Data
+    public static class Rewrite {
+        /** 改写总开关，关闭则直接走规则 fallback */
+        private Boolean enabled = true;
+        /** 无历史时，问题字数低于此阈值则不改写 */
+        private Integer needsRewriteNoHistoryChars = 8;
+        /** 有历史时，问题字数低于此阈值则不改写 */
+        private Integer needsRewriteWithHistoryChars = 18;
+        /** 单轮最大子问题数 */
+        private Integer maxSubQuestions = 4;
+        /** 改写 LLM temperature */
+        private Double temperature = 0.2;
+        /** 改写 LLM topP */
+        private Double topP = 0.8;
+        /** 改写模型 thinking 开关（DeepSeek reasoner 系列用） */
+        private Boolean thinkingEnabled = false;
+    }
+
+    // ============ Orchestration（编排决策）============
+
+    @Data
+    public static class Orchestration {
+        /** AUTO_DOCUMENT 模式下，知识路由置信度低于此值 → CLARIFICATION */
+        private Double clarifyConfidenceThreshold = 0.55;
+        /** 候选文档 top1 与 top2 评分差 ≤ 此值视为模糊 → CLARIFICATION */
+        private Double clarifyTopScoreDiff = 3.0;
+        /** 检索 topK 用于候选文档评分 */
+        private Integer routeCandidateTopK = 5;
     }
 }
