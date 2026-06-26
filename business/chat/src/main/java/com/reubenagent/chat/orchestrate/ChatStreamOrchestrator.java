@@ -249,12 +249,14 @@ public class ChatStreamOrchestrator {
                     taskInfo.getTraceRecorder());
             taskInfo.setExecutionPlan(plan);
             if (plan.isClarification()) {
-                emitThinking(taskInfo, plan.getClarificationReply() == null ? "需要澄清" : plan.getClarificationReply());
+                // 澄清：直接把澄清文案作为回答输出，不重复 emit thinking
                 return Flux.just(plan.getClarificationReply() == null ? "" : plan.getClarificationReply());
             }
             ConversationExecutor executor = executorRegistry.get(plan.getExecutionMode());
             return executor.execute(taskInfo);
         })
+                // prepare()/executor 在 defer 内做阻塞 DB/LLM 调用，必须先 subscribeOn 切到弹性线程
+                .subscribeOn(Schedulers.boundedElastic())
                 .publishOn(Schedulers.boundedElastic())
                 .doOnNext(chunk -> emitModelChunk(taskInfo, chunk))
                 .doOnError(error -> finalize(taskInfo, ChatTurnStatus.FAILED, errorMessage(error)))
@@ -292,8 +294,10 @@ public class ChatStreamOrchestrator {
             return;
         }
         ChatTraceRecorder recorder = taskInfo.getTraceRecorder();
+        // FINALIZE 的 executionMode 用真实模式名（非 ChatTurnStatus），避免 trace 表 execution_mode 恒 null
+        String finalizeExecMode = resolveFinalExecutionModeName(taskInfo);
         ChatTraceRecorder.StageHandle finalizeStage = recorder == null ? null
-                : recorder.startStage(ChatTraceStageCode.FINALIZE, status.name(), "收尾落库", null);
+                : recorder.startStage(ChatTraceStageCode.FINALIZE, finalizeExecMode, "收尾落库", null);
 
         // 阶段 1：emit 终止事件
         try {
@@ -317,6 +321,7 @@ public class ChatStreamOrchestrator {
                     .finishNote(status == ChatTurnStatus.FAILED ? errorMessage : "")
                     .sourceSnapshotList(jsonCodec.toJson(taskInfo.getReferences()))
                     .toolTraceList(jsonCodec.toJson(taskInfo.getThinkingSteps()))
+                    .debugTraceJson(buildDebugTraceJson(taskInfo.getTraceRecorder()))
                     .firstTokenLatencyMs(toNullable(taskInfo.getFirstTokenLatencyMs().get()))
                     .totalLatencyMs(totalLatency)
                     .build();
@@ -329,9 +334,10 @@ public class ChatStreamOrchestrator {
                     .build());
 
             if (recorder != null) {
-                recorder.completeStage(finalizeStage, "收尾完成", java.util.Map.of(
-                        "finalStatus", status.name(),
-                        "answerLength", taskInfo.getAnswerBuffer().length()));
+                java.util.Map<String, Object> finalizeSnapshot = new java.util.HashMap<>();
+                finalizeSnapshot.put("finalStatus", status.name());
+                finalizeSnapshot.put("answerLength", taskInfo.getAnswerBuffer().length());
+                recorder.completeStage(finalizeStage, "收尾完成", finalizeSnapshot);
             }
         } catch (Exception e) {
             log.error("收尾落库失败 → conversationId={} turnId={}",
@@ -362,8 +368,9 @@ public class ChatStreamOrchestrator {
         }
 
         ChatTraceRecorder recorder = taskInfo.getTraceRecorder();
+        String stopExecMode = resolveFinalExecutionModeName(taskInfo);
         ChatTraceRecorder.StageHandle finalizeStage = recorder == null ? null
-                : recorder.startStage(ChatTraceStageCode.FINALIZE, ChatTurnStatus.STOPPED.name(), "停止收尾", null);
+                : recorder.startStage(ChatTraceStageCode.FINALIZE, stopExecMode, "停止收尾", null);
 
         try {
             emit(taskInfo, eventWriter.status("⏹ " + reason, taskInfo.getConversationId(), taskInfo.getTurnId()));
@@ -388,8 +395,10 @@ public class ChatStreamOrchestrator {
                     .sessionStatus(ChatSessionStatus.IDLE.getCode())
                     .build());
             if (recorder != null) {
-                recorder.completeStage(finalizeStage, "停止收尾完成", java.util.Map.of(
-                        "finalStatus", ChatTurnStatus.STOPPED.name(), "reason", reason));
+                java.util.Map<String, Object> stopSnapshot = new java.util.HashMap<>();
+                stopSnapshot.put("finalStatus", ChatTurnStatus.STOPPED.name());
+                stopSnapshot.put("reason", reason);
+                recorder.completeStage(finalizeStage, "停止收尾完成", stopSnapshot);
             }
         } catch (Exception e) {
             log.error("停止落库失败 → conversationId={}", taskInfo.getConversationId(), e);
@@ -441,6 +450,31 @@ public class ChatStreamOrchestrator {
             return plan.getExecutionMode().getCode();
         }
         return ExecutionMode.REACT_AGENT.getCode();
+    }
+
+    /** FINALIZE trace stage 的 executionMode 名（真 ExecutionMode，非 ChatTurnStatus）。 */
+    private String resolveFinalExecutionModeName(ChatTaskInfo taskInfo) {
+        ConversationExecutionPlan plan = taskInfo.getExecutionPlan();
+        if (plan != null && plan.getExecutionMode() != null) {
+            return plan.getExecutionMode().name();
+        }
+        return ExecutionMode.REACT_AGENT.name();
+    }
+
+    /** 序列化本轮模型调用追踪到 turn.debug_trace_json（含 modelUsageTraces），无 recorder/无追踪返回 null。 */
+    private String buildDebugTraceJson(ChatTraceRecorder recorder) {
+        if (recorder == null) {
+            return null;
+        }
+        java.util.List<com.reubenagent.chat.model.debug.ChatModelUsageTrace> traces =
+                recorder.snapshotModelUsageTraces();
+        if (traces == null || traces.isEmpty()) {
+            return null;
+        }
+        com.reubenagent.chat.model.debug.ChatDebugTrace debug = com.reubenagent.chat.model.debug.ChatDebugTrace.builder()
+                .modelUsageTraces(traces)
+                .build();
+        return jsonCodec.toJson(debug);
     }
 
     private Flux<String> errorFlux(String message, String conversationId) {

@@ -16,8 +16,10 @@ import com.reubenagent.chat.support.ChatContextKeys;
 import com.reubenagent.chat.support.ChatPromptNames;
 import com.reubenagent.chat.support.ChatPromptTemplateService;
 import com.reubenagent.chat.support.ChatStreamEventWriter;
+import com.reubenagent.chat.support.ChatTexts;
 import com.reubenagent.chat.support.SinkEmitHelper;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
@@ -54,6 +56,7 @@ import java.util.Map;
  * @author reuben
  * @since 2026-06-25
  */
+@Slf4j
 @Component
 public class ReactAgentExecutor implements ConversationExecutor {
 
@@ -113,16 +116,30 @@ public class ReactAgentExecutor implements ConversationExecutor {
                 return Flux.<String>error(wrapped);
             }
 
+            // 标记是否已流式输出过文本：FINISHED 的兜底整段答案只在无 STREAMING 时 emit，避免重复
+            java.util.concurrent.atomic.AtomicBoolean streamedText = new java.util.concurrent.atomic.AtomicBoolean(false);
+
             return agentStream
-                    .filter(node -> node instanceof StreamingOutput<?>)
-                    .map(node -> (StreamingOutput<?>) node)
+                    .ofType(StreamingOutput.class)
+                    .cast(StreamingOutput.class)
                     .filter(so -> so.getOutputType() == OutputType.AGENT_MODEL_STREAMING
                             || so.getOutputType() == OutputType.AGENT_MODEL_FINISHED)
-                    .map(StreamingOutput::message)
-                    .filter(AssistantMessage.class::isInstance)
-                    .map(AssistantMessage.class::cast)
-                    .filter(msg -> !msg.hasToolCalls() && msg.getText() != null && !msg.getText().isBlank())
-                    .map(AssistantMessage::getText)
+                    // 用 concatMap 跳过不需要的输出（Reactor 的 map 不允许返回 null，否则报错）
+                    .concatMap(so -> {
+                        org.springframework.ai.chat.messages.AssistantMessage msg =
+                                so.message() instanceof AssistantMessage
+                                        ? (AssistantMessage) so.message() : null;
+                        if (msg == null || msg.hasToolCalls()
+                                || msg.getText() == null || msg.getText().isBlank()) {
+                            return Flux.<String>empty();
+                        }
+                        // FINISHED 的兜底整段答案只在无 STREAMING 时 emit，避免重复
+                        if (so.getOutputType() == OutputType.AGENT_MODEL_FINISHED && streamedText.get()) {
+                            return Flux.<String>empty();
+                        }
+                        streamedText.set(true);
+                        return Flux.just(msg.getText());
+                    })
                     .onErrorResume(error -> {
                         ChatException wrapped = error instanceof ChatException
                                 ? (ChatException) error
@@ -141,6 +158,10 @@ public class ReactAgentExecutor implements ConversationExecutor {
         String question = pickQuestion(plan, taskInfo.getQuestion());
         boolean timeSensitive = timeSensitiveQueryHelper.isTimeSensitive(question, taskInfo.getCurrentDate());
         String freshSearchHint = timeSensitive ? TIME_SENSITIVE_HINT : "";
+        if (timeSensitive) {
+            log.info("时间敏感查询触发联网 hint 注入 → conversationId={} question={}",
+                    taskInfo.getConversationId(), ChatTexts.clip(question, 80));
+        }
         String historySummaryBlock = formatHistoryBlock(plan);
 
         Map<String, String> vars = new LinkedHashMap<>();
@@ -189,6 +210,7 @@ public class ReactAgentExecutor implements ConversationExecutor {
         meta.put(ChatContextKeys.CONVERSATION_ID, taskInfo.getConversationId());
         meta.put(ChatContextKeys.TURN_ID, taskInfo.getTurnId());
         meta.put(ChatContextKeys.USED_TOOLS, taskInfo.getUsedTools());
+        meta.put(ChatContextKeys.THINKING_STEPS, taskInfo.getThinkingSteps());
         meta.put(ChatContextKeys.QUESTION, pickQuestion(plan, taskInfo.getQuestion()));
         meta.put(ChatContextKeys.CURRENT_DATE, taskInfo.getCurrentDate());
         meta.put(ChatContextKeys.CURRENT_DATE_TEXT, taskInfo.getCurrentDateText());

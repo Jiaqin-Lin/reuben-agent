@@ -190,6 +190,15 @@ public class TavilySearchTool {
         if (toolContext == null || toolContext.getContext() == null) {
             return;
         }
+        // 同步写入 thinkingSteps，供 finalize 落 tool_trace_list（与 orchestrator.emitThinking 对齐）
+        Object stepsObj = toolContext.getContext().get(ChatContextKeys.THINKING_STEPS);
+        if (stepsObj instanceof java.util.List) {
+            try {
+                ((java.util.List<String>) stepsObj).add(THINKING_TEXT);
+            } catch (Exception ignored) {
+                // 容错：类型不匹配时跳过持久化，不影响 SSE 透传
+            }
+        }
         Object sink = toolContext.getContext().get(ChatContextKeys.STREAM_SINK);
         String conversationId = (String) toolContext.getContext().get(ChatContextKeys.CONVERSATION_ID);
         Object turnIdObj = toolContext.getContext().get(ChatContextKeys.TURN_ID);
@@ -203,16 +212,21 @@ public class TavilySearchTool {
     @SuppressWarnings("unchecked")
     private void registerTrace(ToolContext toolContext, TavilySearchRequest request,
                                TavilySearchToolResult result, long durationMs, Throwable error) {
-        // 标记 usedTools
+        // 标记 usedTools（不持久化工具 trace，仅运行态记录供 finalize/视图使用）
+        markUsedTool(toolContext);
+        log.debug("Tavily 工具调用收尾 → query={} success={} duration={}ms",
+                request == null ? null : request.getQuery(),
+                result != null && result.isSuccess(), durationMs);
+    }
+
+    @SuppressWarnings("unchecked")
+    private void markUsedTool(ToolContext toolContext) {
         if (toolContext != null && toolContext.getContext() != null) {
             Object used = toolContext.getContext().get(ChatContextKeys.USED_TOOLS);
             if (used instanceof java.util.Set) {
                 ((java.util.Set<String>) used).add("tavily_search");
             }
         }
-        log.debug("Tavily 工具调用收尾 → query={} success={} duration={}ms",
-                request == null ? null : request.getQuery(),
-                result != null && result.isSuccess(), durationMs);
     }
 
     /** 暴露 thinking 文案与超时常量供测试断言。 */

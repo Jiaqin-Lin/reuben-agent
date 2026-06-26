@@ -11,8 +11,10 @@ import com.reubenagent.chat.model.orchestrate.DocumentNavigationAction;
 import com.reubenagent.chat.model.orchestrate.DocumentNavigationDecision;
 import com.reubenagent.chat.model.orchestrate.NavigationScopeMode;
 import com.reubenagent.chat.service.IChatMemoryService;
+import com.reubenagent.chat.service.ChatDocumentOptionService;
 import com.reubenagent.chat.support.ChatIntentHints;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
+import com.reubenagent.document.vo.KnowledgeDocumentOptionVo;
 import com.reubenagent.rag.dto.RagRetrieveRequest;
 import com.reubenagent.rag.model.RetrievalResult;
 import com.reubenagent.rag.service.IRagRetrievalService;
@@ -57,6 +59,7 @@ public class ChatPreparationOrchestrator {
     private final ChatQueryRewriteService rewriteService;
     private final IRagRetrievalService ragRetrievalService;
     private final ChatProperties properties;
+    private final ChatDocumentOptionService documentOptionService;
 
     /**
      * 准备一轮对话的执行计划。
@@ -94,22 +97,12 @@ public class ChatPreparationOrchestrator {
     }
 
     private ChatMemoryContext loadMemory(String conversationId, ChatTraceRecorder traceRecorder) {
-        ChatTraceRecorder.StageHandle stage = traceRecorder == null ? null
-                : traceRecorder.startStage(ChatTraceStageCode.MEMORY, "memory", "加载记忆上下文", null);
+        // MEMORY stage 由 ChatMemoryServiceImpl.loadMemoryContext 内部负责开关，这里不再重复开 stage
         try {
             ChatMemoryContext ctx = memoryService.loadMemoryContext(conversationId, traceRecorder);
-            if (traceRecorder != null) {
-                Map<String, Object> snapshot = new HashMap<>();
-                snapshot.put("hasSummary", ctx != null && ctx.getLongTermSummary() != null && !ctx.getLongTermSummary().isBlank());
-                snapshot.put("recentTurns", ctx == null || ctx.getRecentTurns() == null ? 0 : ctx.getRecentTurns().size());
-                traceRecorder.completeStage(stage, "记忆加载完成", snapshot);
-            }
             return ctx;
         } catch (Exception e) {
             log.warn("记忆加载失败，降级空上下文 → conversationId={} err={}", conversationId, e.getMessage());
-            if (traceRecorder != null) {
-                traceRecorder.failStage(stage, "记忆加载失败", e.getMessage(), null);
-            }
             return null;
         }
     }
@@ -206,7 +199,7 @@ public class ChatPreparationOrchestrator {
                 return null;
             }
             Map<Long, List<Double>> docScores = new HashMap<>();
-            Map<Long, String> docNames = new HashMap<>();
+            Map<Long, String> docNames = resolveDocNames(resp.getResults());
             for (RetrievalResult r : resp.getResults()) {
                 if (r.getDocumentId() == null || r.getScore() == null) {
                     continue;
@@ -232,7 +225,27 @@ public class ChatPreparationOrchestrator {
         }
     }
 
-    /** 文档导航决策 —— Phase 5 简化版：默认 DIRECT_RETRIEVAL，结构定位类问题升级为 LOCATE_THEN_RETRIEVE。 */
+    /**
+     * 解析候选 documentId → documentName 映射。
+     *
+     * <p>rag 模块的 {@link RetrievalResult} 只携带 documentId，无 documentName，
+     * 这里委托 {@link ChatDocumentOptionService} 查已索引文档补名，失败返回空 map（clarification 回退到 documentId 字符串）。</p>
+     */
+    private Map<Long, String> resolveDocNames(List<RetrievalResult> results) {
+        if (results == null || results.isEmpty()) {
+            return new HashMap<>();
+        }
+        Map<Long, String> names = new HashMap<>();
+        try {
+            for (KnowledgeDocumentOptionVo opt : documentOptionService.listDocumentOptions()) {
+                names.put(opt.getDocumentId(), opt.getDocumentName());
+            }
+        } catch (Exception e) {
+            log.warn("文档选项查询失败，clarification 候选名将回退为 documentId → err={}", e.getMessage());
+        }
+        return names;
+    }
+
     private DocumentNavigationDecision decideNavigation(Long documentId, ChatRewriteResult rewrite,
                                                         ChatTraceRecorder traceRecorder) {
         String q = rewrite == null ? "" : rewrite.getRewrittenQuery();

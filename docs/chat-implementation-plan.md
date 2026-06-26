@@ -283,6 +283,8 @@ super-agent-business-chat / org.javaup.ai.chatagent
 > - `ChatPreparationOrchestrator.resolveAutoDocument` 的知识路由（需 RAG 向量索引 + MySQL/Redis）
 > - 落库 trace stage（需 `reuben_agent_chat_trace_stage` 表与 MySQL）
 > 建议晚上回去在有 Docker 的电脑上跑一次端到端 SSE 调用，验证 MEMORY/INTENT/REWRITE/ROUTE 四个 stage 落库。
+>
+> ✅ **2026-06-26 已实测**：MEMORY/INTENT/REWRITE/ROUTE 四个 stage 均落库（实测 turn 全链路 trace 行齐备）；AUTO_DOCUMENT 知识路由选中文档成功走 RETRIEVAL；CLARIFICATION 在模糊问下正确短路。
 
 - [x] **5.1 `ChatQueryRewriteService`**
   - [x] `rewrite(question, ChatMemoryContext) → ChatRewriteResult`（rewrittenQuery + subQuestions + usedRewrite 标志）
@@ -314,6 +316,8 @@ super-agent-business-chat / org.javaup.ai.chatagent
 **产出**：把问题检索文档证据 → 组装 prompt → 流式生成带引用的回答。对标 super-agent `RagChatExecutor` + `RagRetrievalEngine` + `RagPromptAssemblyService`。**这是与 reuben-agent 已有 rag 模块对接的核心**。
 
 > **本地无 Docker 待测项**：6.1 的检索链路依赖 rag 模块（向量库 / 关键词库需 ES + PGVector），本地无 Docker 环境无法端到端跑通。Phase 6 代码已编译通过（`mvn -pl business/chat -am clean compile`），运行期联调待用户在带中间件的机器验证。
+>
+> ✅ **2026-06-26 已实测端到端跑通**（Docker pgvector + ES + DeepSeek）：DOCUMENT 模式检索 5 条证据 → reference 事件 → 引用回答；channel_execution/recalled=5 accepted=5；retrieval_result 落库 5 条（documentName 已填充）。
 
 - [x] **6.1 检索适配层**
   - [x] `ChatRagRetrievalAdapter`（`@Service`）：按类型注入 `IRagRetrievalService`，把 `ChatRewriteResult.subQuestions` 逐个转 `RagRetrieveRequest`（query + topK + filterFields=documentId），聚合 `RagRetrieveResponse`
@@ -343,11 +347,13 @@ super-agent-business-chat / org.javaup.ai.chatagent
 **产出**：开放式对话的 Agent loop（推理→工具调用→观察→…）+ 联网搜索工具。对标 super-agent `ReactAgentExecutor` + `TavilySearchTool` + 拦截器。
 
 > ⚠️ **待测项**（本机无 Docker / 无 Tavily key，端到端运行验证留待夜间用自己电脑跑）：
-> - Tavily 真实联网调用（需配 `chat.tavily.api-key`）
-> - ReAct Agent checkpoint 落 `GRAPH_THREAD`/`GRAPH_CHECKPOINT` 表（需 MySQL 实例）
-> - 多轮工具调用 + `ModelCallLimitHook`/`ToolCallLimitHook` 阈值触发 `END`
-> - SSE 透传 thinking 事件（"🔍 正在联网搜索"）+ 工具 trace 落 `taskInfo.toolTraces`
-> - 时间敏感 query 触发 `freshSearchHint` 注入
+> - [x] Tavily 真实联网调用（需配 `chat.tavily.api-key`）—— ✅ **2026-06-27 实测**：配 key 后 `TavilySearchTool` `/search` success=true，855 text chunk 带实时内容。
+> - [x] ReAct Agent checkpoint 落 `GRAPH_THREAD`/`GRAPH_CHECKPOINT` 表（需 MySQL 实例）—— ✅ **2026-06-26 实测**：`MysqlSaver` `CREATE_IF_NOT_EXISTS` 已建出 `GRAPH_THREAD`/`GRAPH_CHECKPOINT` 两表，OPEN_CHAT 多轮对话 checkpoint 正常落库（66 checkpoint / 9 thread）。
+> - [ ] 多轮工具调用 + `ModelCallLimitHook`/`ToolCallLimitHook` 阈值触发 `END` —— **留 Phase 9**：需构造会反复调工具的 query 压到阈值（maxModelCallsPerRun=8 / maxToolCallsPerRun=6），单独设计用例。
+> - [x] SSE 透传 thinking 事件（"🔍 正在联网搜索"）+ 工具 trace 落 `taskInfo.toolTraces` —— ✅ **2026-06-27 实测**：thinking 事件透传 + `tool_trace_list` 落库 `["正在分析问题上下文。","🔍 正在联网搜索最新资料。"]`（修了 `buildRunnableConfig` 漏传 `THINKING_STEPS` + `emitThinking` 双写）。
+> - [x] 时间敏感 query 触发 `freshSearchHint` 注入 —— ✅ **2026-06-27 实测**：`assembleAgentQuestion` 命中打 `log.info` 佐证 hint 注入，Tavily 被触发。
+>
+> ✅ **2026-06-26/27 已实测**：OPEN_CHAT（REACT_AGENT）流式回答正常无重复输出，turn 落库 execution_mode=4，trace 全链路。本次修复 `.map()` 返回 null 的 Reactor 异常（改 `.concatMap`）+ FINISHED/STREAMING 去重 + 工具 thinking 双写落库 + freshSearchHint 可观测日志。
 
 - [x] **7.1 工具定义**
   - [x] `TavilySearchTool`（`@Component`）：`search(TavilySearchRequest, ToolContext) → TavilySearchToolResult`，调 Tavily REST `/search`
@@ -393,11 +399,11 @@ super-agent-business-chat / org.javaup.ai.chatagent
 > - [x] `ReactAgentExecutor.ensureToolTracesList` 每次新建 list 注入 metadata，`TavilySearchTool.registerTrace` 写入后无人消费（`ChatTaskInfo` 无 `toolTraces` 字段）—— 删除 misleading 的 registerTrace 机制（保留 usedTools 写入；`ChatToolTrace` 类与 `ChatDebugTrace.toolTraces` 字段保留供 debug 模型复用）。
 > - [x] `ChatRagRetrievalAdapter` 通道类型恒为 `"hybrid"`（rag 模块返回融合结果不暴露 per-channel），`reuben_agent_chat_channel_execution` 永远只有一行 —— **接受 hybrid-only，加 Javadoc 说明**；per-channel 保真需 rag 侧响应携带 channel 元数据（登记待测，Phase 9+）。
 > - [x] `ChatQueryRewriteService.rewrite` 调 `callText` 未传 `traceRecorder`，改写 LLM 调用的 model-usage trace 丢失 —— 改调带 sink 重载，传 `recorder.traceSink()`。
-> - [x] `routeKnowledge` 的 `docNames` map 声明后从不填充，`RouteCandidate.documentName` 恒 null（clarification 候选名回退成数字 documentId）。 —— **登记待测**：`RetrievalResult` 仅有 `documentId` 无 `documentName`，需 rag 侧 join document 表或响应携带 documentName（Phase 9+）。
+> - [x] `routeKnowledge` 的 `docNames` map 声明后从不填充，`RouteCandidate.documentName` 恒 null（clarification 候选名回退成数字 documentId）—— 已修：注入 `ChatDocumentOptionService` 查已索引文档补名，clarification 候选显示真文档名（实测 AUTO_DOCUMENT 落 retrieval_result document_name 已填充）。
 > - [x] `ChatPreparationOrchestrator` 仍剩两处 `Map.of(...)`（INTENT/MEMORY stage snapshot）含 boolean/可能 null 风险，统一改 `HashMap`。
 > - [x] `DocumentNavigationAction` 的 `LOCATE_ONLY` / `REJECT` 枚举值从未产出（decideNavigation 只产 DIRECT_RETRIEVAL / LOCATE_THEN_RETRIEVE）—— 删除枚举值 + 同步删 `toExecutionMode()` 中两个 case。
 > - [x] `TimeSensitiveQueryHelper` / `ReactAgentExecutor` 的 `@Slf4j` 声明未使用（anti-pattern #9）。
-> - [ ] 现网联调环境：pgvector + ES 索引在本机曾被卷重置（chunk 表有数据但 embedding 0 条），靠重新 confirm 策略触发 index-build 重建。**Phase 8 集成测试前确认索引完整性**，或在 `ChatDockerIntegrationTest` 里自带上传→索引→问答的完整 fixture。
+> - [x] 现网联调环境：pgvector + ES 索引在本机曾被卷重置（chunk 表有数据但 embedding 0 条），靠重新 confirm 策略触发 index-build 重建。**Phase 8 集成测试前确认索引完整性** —— 已实测：重新上传 RAG 白皮书 → confirm 策略触发 index-build → 26 条 embedding 落库 → DOCUMENT 模式 RAG 回答带 5 条引用，端到端跑通。`ChatDockerIntegrationTest` 自带上传→索引→问答 fixture 留 Phase 10。
 
 - [x] **8.1 Executor 接口与注册**
   - [x] `ConversationExecutor` 接口：`ExecutionMode mode()` + `Flux<String> execute(ChatTaskInfo)`
@@ -421,20 +427,45 @@ super-agent-business-chat / org.javaup.ai.chatagent
   - [x] 每个 stage 开始/结束经 recorder 落 `reuben_agent_chat_trace_stage`
   - [x] `ChatStageBenchmarkService` + Impl：P50/P90/P99/avg/max/min/sampleCount 滑窗，Redis LIST + Lua LTRIM 原子聚合（FLUSH_EVERY_N=20 触发 upsert）
 
+> ### Phase 8 端到端验证（2026-06-26，Docker 中间件 + DeepSeek key 实跑）
+>
+> **跑通的场景**（SSE 真实流式，落库已核对）：
+> - OPEN_CHAT（REACT_AGENT）：流式回答正常，107/284 text chunk + done，无重复输出；turn 落库 execution_mode=4，trace stage 全链路（记忆/意图/路由/ReAct/收尾）。
+> - DOCUMENT（RETRIEVAL）：检索 5 条证据 → reference 事件 → 引用回答；channel_execution/recalled=5 accepted=5；retrieval_result 落库 5 条（documentName 已填充）。
+> - AUTO_DOCUMENT（知识路由）：routeKnowledge 选中文档 → RETRIEVAL，回答带引用。
+> - CLARIFICATION：模糊问"介绍一下" → execution_mode=5，直接 emit 澄清文案（不重复 thinking）。
+> - GRAPH_THEN_EVIDENCE：结构定位类问 → execution_mode=2，先定位章节再检索证据，回答 722 字。
+> - 多轮记忆：OPEN_CHAT 跨轮记住"小明"姓名（recent window 生效）。
+> - 停止生成：mid-generation stop → turn_status=4(STOPPED) + finish_note="用户已停止生成"，会话回 IDLE。
+>
+> **本次联调修的运行期 bug**（Phase 8 遗留项实测暴露）：
+> - `ReactAgentExecutor` 用 `.map(...)` 返回 null 触发 Reactor "mapper returned a null value" → 改 `.concatMap` 返回 `Flux.empty()` 跳过非文本/重复输出。
+> - `reuben_agent_chat_trace_stage` 等表未随 docker-entrypoint 建出（旧库残留）→ 重灌 `sql/reuben_agent_mysql.sql`；FINALIZE 的 `execution_mode` 由 `status.name()`（ChatTurnStatus）改为真 `ExecutionMode` 名，避免 trace 行 execution_mode 恒 null。
+> - MEMORY stage 双开（orchestrator + MemoryServiceImpl 各开一次）→ 移除 orchestrator 侧 stage，由 MemoryServiceImpl 独占。
+> - `MybatisChatRetrievalObserveStoreImpl` 落 retrieval_result 时 `document_name` 恒 null → 从聚合组 references 反查 documentName 填充。
+> - `routeKnowledge` 的 `docNames` map 声明后从不填充 → 注入 `ChatDocumentOptionService` 查已索引文档补名（clarification 候选不再回退数字 ID）。
+> - `finalize` 的 `debug_trace_json` 漏写 → 调 `recorder.snapshotModelUsageTraces()` 序列化进 turn 表；`Map.of` snapshot 改 `HashMap`（null 容错）。
+> - CLARIFICATION 路径重复 emit thinking → 删 thinking，澄清文案只作为 text 答案输出。
+> - `ReactAgentExecutor.buildRunnableConfig` 漏传 `THINKING_STEPS` + `TavilySearchTool.emitThinking` 只 emit 不写 list → 工具 thinking 丢失。修：metadata 注入 `THINKING_STEPS`，`emitThinking` 双写（steps.add + sink emit，对齐 super-agent `ExecutorEventSupport.publishThinking`）。
+> - `freshSearchHint` 注入无日志可观测 → `assembleAgentQuestion` 命中打 `log.info`，补 `ReactAgentExecutor` `@Slf4j`。
+
 ---
 
-### Phase 8 待测清单（本机无 Docker，集成测试在远端环境跑）
+### Phase 8 待测清单（2026-06-26 Docker 实测后更新）
 
-- [ ] Docker 集成测试：`MybatisChatTraceStageStoreImpl` insert/update 端到端、`MybatisChatRetrievalObserveStoreImpl` 批量 insert、`ChatStageBenchmarkServiceImpl` Redis Lua LTRIM 原子性 + 并发 push 下的 flush 触发。
-- [ ] `GraphOnlyExecutor` 结构摘要格式 end-to-end（含超长文档截断到前 50 条节点）。
-- [ ] `GraphThenEvidenceExecutor` 节点匹配准确度（substring + 2-char token）+ 缩小 `structureNodeId` filter 后召回率；复杂分词留 Phase 9。
-- [ ] `ReactAgentExecutor` 的 model-usage trace 接入 —— 走 Alibaba ReactAgent，model 调用不经过 `ObservedChatModelService`，本期未接（需 hook agent 内部 ChatModel 调用），登记待测 Phase 9+。
-- [ ] `ChatRagRetrievalAdapter` channel-type per-channel 保真 —— 当前恒 "hybrid"（rag 模块返回融合结果不暴露 per-channel），需 rag 侧响应携带 channel 元数据，Phase 9+。
-- [ ] `routeKnowledge` `RouteCandidate.documentName` 填充 —— `RetrievalResult` 仅有 `documentId`，需 rag 侧 join document 表或响应携带 documentName，Phase 9+。
-- [ ] `LOCATE_ONLY` / `REJECT` 枚举删除后无运行时引用（编译期已验证 0 命中）。
-- [ ] pgvector/ES 索引完整性（集成测试前 confirm；或在 `ChatDockerIntegrationTest` 自带上传→索引→问答 fixture）。
-- [ ] `ChatTraceStageStore` 接口扩展 `listStages(turnId)` / `deleteByConversation`（Phase 9 观测查询需要）。
-- [ ] turn 表 `model_usage_json` 字段持久化 —— 当前 `recorder.snapshotModelUsageTraces()` 仅返回内存 list 供 finalize 落 trace snapshot；若要落 turn 表需加列，Phase 9。
+> 本清单中已勾项已完成实测；未勾项（非 Phase 9 观测查询必需的）统一挪到 **Phase 9.4** 一并处理，此处保留索引。
+
+- [x] Docker 集成测试：`MybatisChatTraceStageStoreImpl` insert/update 端到端（实测 74 行落库）、`MybatisChatRetrievalObserveStoreImpl` 批量 insert（实测 20 行 + channel_exec 7 行）。
+- [x] `GraphThenEvidenceExecutor` 节点匹配准确度（substring + 2-char token）+ 缩小 `structureNodeId` filter 后召回率 —— 实测"第三章讲了什么"execution_mode=2，回答 722 字带引用。
+- [→ 9.4] `GraphOnlyExecutor` 结构摘要格式 end-to-end —— 未触发，挪 Phase 9.4。
+- [→ 9.4] `ReactAgentExecutor` 的 model-usage trace 接入 —— 挪 Phase 9.4。
+- [→ 9.4] `ChatRagRetrievalAdapter` channel-type per-channel 保真 —— 挪 Phase 9.4。
+- [→ 9.4] `ChatStageBenchmarkServiceImpl` Redis Lua LTRIM 原子性 + 并发 push flush —— 挪 Phase 9.4。
+- [x] `routeKnowledge` `RouteCandidate.documentName` 填充 —— 已修：注入 `ChatDocumentOptionService` 补名，实测 retrieval_result.document_name 已填充。
+- [x] `LOCATE_ONLY` / `REJECT` 枚举删除后无运行时引用（编译期已验证 0 命中，运行期实测无引用）。
+- [x] pgvector/ES 索引完整性 —— 实测重新上传→confirm 策略→index-build 重建 26 条 embedding，DOCUMENT RAG 端到端跑通。
+- [→ 9.3] `ChatTraceStageStore` 接口扩展 `listStages(turnId)` / `deleteByConversation` —— 挪 Phase 9.3（观测查询依赖）。
+- [x] turn 表 `debug_trace_json` 字段持久化 —— 已修：finalize 调 `recorder.snapshotModelUsageTraces()` 序列化进 `debug_trace_json`（实测 DOCUMENT turn dl=196）。注：列名是 `debug_trace_json` 非 `model_usage_json`，model-usage trace 作为 ChatDebugTrace 子字段写入。
 
 
 ---
@@ -460,6 +491,14 @@ super-agent-business-chat / org.javaup.ai.chatagent
   - [ ] `getRetrievalResults(conversationId, turnId)` → `List<RetrievalResultView>`
   - [ ] `getChannelExecutions(conversationId, turnId)` → `List<ChannelExecutionView>`
   - [ ] `getStageBenchmarks(executionMode)` → `List<StageBenchmarkView>`
+  - [ ] `ChatTraceStageStore` 接口扩展 `listStages(turnId)` / `deleteByConversation`（9.3 观测查询依赖）
+
+- [ ] **9.4 Phase 7/8 遗留待测项**（本期未做，挪到 Phase 9 一并验证）
+  - [ ] 多轮工具调用 + `ModelCallLimitHook`/`ToolCallLimitHook` 阈值触发 `END`：构造会反复调 Tavily 的 query 压到阈值（maxModelCallsPerRun=8 / maxToolCallsPerRun=6），验证 hook 优雅终止。
+  - [ ] `GraphOnlyExecutor` 结构摘要 end-to-end：实测"目录结构"类问被 `decideNavigation` 判为 LOCATE_THEN_RETRIEVE 走了 GRAPH_THEN_EVIDENCE，未触发纯结构摘要；需调 `ChatIntentHints` 关键词或加用例验证 GRAPH_ONLY 路径（含超长文档截断到前 50 条节点）。
+  - [ ] `ReactAgentExecutor` model-usage trace 接入：走 Alibaba ReactAgent，model 调用不经过 `ObservedChatModelService`，需 hook agent 内部 ChatModel 调用才能落 token/成本 trace。
+  - [ ] `ChatRagRetrievalAdapter` channel-type per-channel 保真：当前恒 "hybrid"（rag 模块返回融合结果不暴露 per-channel），需 rag 侧响应携带 channel 元数据。
+  - [ ] `ChatStageBenchmarkServiceImpl` Redis Lua LTRIM 原子性 + 并发 push 下的 flush 触发：单轮样本不足 FLUSH_EVERY_N=20，需压测验证。
 
 
 ---

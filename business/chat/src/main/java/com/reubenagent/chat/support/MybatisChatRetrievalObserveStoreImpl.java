@@ -62,13 +62,28 @@ public class MybatisChatRetrievalObserveStoreImpl implements MybatisChatRetrieva
                 }
                 rank++;
                 try {
-                    retrievalResultMapper.insert(buildEntity(conversationId, turnId, traceId, subIdx, r, rank));
+                    retrievalResultMapper.insert(buildEntity(conversationId, turnId, traceId, subIdx, r, rank,
+                            resolveDocumentName(r, group)));
                 } catch (Exception e) {
                     log.warn("检索结果落库失败（单条跳过）→ conversationId={} chunkId={} err={}",
                             conversationId, r.getChunkId(), e.getMessage());
                 }
             }
         }
+    }
+
+    /** 从聚合组 references 反查 documentName（rag RetrievalResult 无 name，但 SearchReference 带了快照名）。 */
+    private String resolveDocumentName(RetrievalResult r, ChatRetrievalResult group) {
+        if (group == null || group.getReferences() == null) {
+            return null;
+        }
+        for (com.reubenagent.chat.model.SearchReference ref : group.getReferences()) {
+            if (ref != null && java.util.Objects.equals(ref.getDocumentId(), r.getDocumentId())
+                    && java.util.Objects.equals(ref.getChunkId(), r.getChunkId())) {
+                return ref.getDocumentName();
+            }
+        }
+        return null;
     }
 
     @Override
@@ -103,7 +118,8 @@ public class MybatisChatRetrievalObserveStoreImpl implements MybatisChatRetrieva
 
     private com.reubenagent.chat.entity.ChatRetrievalResult buildEntity(String conversationId, Long turnId,
                                                                         String traceId, int subIdx,
-                                                                        RetrievalResult r, int rank) {
+                                                                        RetrievalResult r, int rank,
+                                                                        String documentName) {
         BigDecimal finalScore = r.getScore() == null ? null : BigDecimal.valueOf(r.getScore());
         BigDecimal rerankScore = r.getRerankScore() == null ? null : BigDecimal.valueOf(r.getRerankScore());
         String preview = r.getChunkText();
@@ -123,6 +139,7 @@ public class MybatisChatRetrievalObserveStoreImpl implements MybatisChatRetrieva
                 .gatePassed(1)
                 .isSelected(1)
                 .documentId(r.getDocumentId())
+                .documentName(documentName)
                 .chunkId(r.getChunkId())
                 .parentBlockId(r.getParentBlockId())
                 .sectionPath(r.getSectionPath())
