@@ -16,6 +16,7 @@ import com.reubenagent.chat.session.TurnArchiveRecord;
 import com.reubenagent.chat.support.ChatStreamEventWriter;
 import com.reubenagent.chat.support.SinkEmitHelper;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
+import com.reubenagent.chat.trace.ChatStageBenchmarkService;
 import com.reubenagent.chat.trace.ChatTraceStageStore;
 import com.reubenagent.chat.vo.ChatStopVo;
 import com.reubenagent.framework.uid.UidGenerator;
@@ -63,6 +64,7 @@ public class ChatStreamOrchestrator {
     private final ChatProperties properties;
     private final UidGenerator uidGenerator;
     private final ChatTraceStageStore traceStageStore;
+    private final ChatStageBenchmarkService benchmarkService;
     private final ChatPreparationOrchestrator preparationOrchestrator;
     private final com.reubenagent.chat.support.ChatJsonCodec jsonCodec;
 
@@ -156,7 +158,7 @@ public class ChatStreamOrchestrator {
         Sinks.Many<String> sink = Sinks.many().unicast().onBackpressureBuffer();
         String traceId = UUID.randomUUID().toString().replace("-", "");
         ChatTraceRecorder recorder = new ChatTraceRecorder(traceStageStore,
-                plan.getConversationId(), turnId, traceId);
+                benchmarkService, plan.getConversationId(), turnId, traceId);
 
         ChatTaskInfo taskInfo = ChatTaskInfo.builder()
                 .conversationId(plan.getConversationId())

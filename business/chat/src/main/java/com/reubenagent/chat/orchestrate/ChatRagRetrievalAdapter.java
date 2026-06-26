@@ -63,18 +63,37 @@ public class ChatRagRetrievalAdapter {
      * 文档模式（{@code selectedDocumentId != null}）→ 带 {@code filterFields=documentId}。</p>
      */
     public List<ChatRetrievalResult> retrieve(ConversationExecutionPlan plan, ChatTaskInfo taskInfo) {
+        return retrieveWithNodeFilter(plan, taskInfo, null);
+    }
+
+    /**
+     * 按 plan 检索证据，可选传入 nodeId 作为 {@code filterFields} 缩小检索范围。
+     *
+     * <p>{@code scopeNodeId} 非空时，{@code filterFields} 同时带 {@code documentId} 与
+     * {@code structureNodeId}，供 rag 侧按节点过滤；为 null 退化为纯文档过滤。</p>
+     *
+     * <p>channel_type 恒为 "hybrid"：rag 模块返回融合结果不暴露 per-channel，per-channel 保真
+     * 需 rag 侧响应携带 channel 元数据，本期登记待测。</p>
+     */
+    public List<ChatRetrievalResult> retrieveWithNodeFilter(ConversationExecutionPlan plan,
+                                                            ChatTaskInfo taskInfo,
+                                                            Long scopeNodeId) {
         ChatTraceRecorder recorder = taskInfo == null ? null : taskInfo.getTraceRecorder();
         ChatTraceRecorder.StageHandle stage = recorder == null ? null
-                : recorder.startStage(ChatTraceStageCode.RAG_RETRIEVE, "RETRIEVAL", "RAG 检索", null);
+                : recorder.startStage(ChatTraceStageCode.RAG_RETRIEVE,
+                        plan == null ? "RETRIEVAL" : plan.getExecutionMode().name(),
+                        "RAG 检索", null);
 
         try {
-            List<ChatRetrievalResult> results = doRetrieve(plan, recorder, taskInfo);
+            List<ChatRetrievalResult> results = doRetrieve(plan, recorder, taskInfo, scopeNodeId);
             if (recorder != null) {
                 int totalEvidence = results.stream().mapToInt(r ->
                         r.getResults() == null ? 0 : r.getResults().size()).sum();
-                recorder.completeStage(stage, "检索完成", Map.of(
-                        "subQuestionCount", results.size(),
-                        "totalEvidence", totalEvidence));
+                Map<String, Object> snapshot = new HashMap<>(3);
+                snapshot.put("subQuestionCount", results.size());
+                snapshot.put("totalEvidence", totalEvidence);
+                snapshot.put("scopeNodeId", scopeNodeId);
+                recorder.completeStage(stage, "检索完成", snapshot);
             }
             // 阶段：落可观测（noop 占位，Phase 8 接入）
             safeObserve(taskInfo, results);
@@ -95,12 +114,12 @@ public class ChatRagRetrievalAdapter {
     }
 
     private List<ChatRetrievalResult> doRetrieve(ConversationExecutionPlan plan, ChatTraceRecorder recorder,
-                                                 ChatTaskInfo taskInfo) {
+                                                 ChatTaskInfo taskInfo, Long scopeNodeId) {
         ChatRewriteResult rewrite = plan.getRewriteResult();
         List<String> subQuestions = pickSubQuestions(plan, rewrite);
         Long docId = plan.getSelectedDocumentId();
         String docName = plan.getSelectedDocumentName();
-        Map<String, String> filter = buildFilter(docId);
+        Map<String, String> filter = buildFilter(docId, scopeNodeId);
 
         List<ChatRetrievalResult> aggregated = new ArrayList<>(subQuestions.size());
         int itemIndex = 1;
@@ -192,12 +211,17 @@ public class ChatRagRetrievalAdapter {
         return List.of(q);
     }
 
-    private Map<String, String> buildFilter(Long documentId) {
-        if (documentId == null) {
+    private Map<String, String> buildFilter(Long documentId, Long scopeNodeId) {
+        if (documentId == null && scopeNodeId == null) {
             return null;
         }
-        Map<String, String> filter = new HashMap<>(2);
-        filter.put("documentId", String.valueOf(documentId));
+        Map<String, String> filter = new HashMap<>(4);
+        if (documentId != null) {
+            filter.put("documentId", String.valueOf(documentId));
+        }
+        if (scopeNodeId != null) {
+            filter.put("structureNodeId", String.valueOf(scopeNodeId));
+        }
         return filter;
     }
 

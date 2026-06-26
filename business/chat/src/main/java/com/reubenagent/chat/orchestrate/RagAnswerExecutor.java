@@ -16,6 +16,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,6 +36,13 @@ import java.util.Map;
  *   <li>失败：emit error 事件 + 抛 {@link ChatException}({@link ChatErrorCode#RETRIEVE_FAILED})，
  *       由 orchestrator finalize 收尾；</li>
  *   <li>引用去重：跨子问题同 chunk 只保留首次出现的 {@link SearchReference}。</li>
+ * </ul></p>
+ *
+ * <p><b>Phase 8 修正</b>：
+ * <ul>
+ *   <li>检索委托 {@code Mono.fromCallable + subscribeOn(boundedElastic)}，避免阻塞 reactor 线程；</li>
+ *   <li>组装 + 流式段抽成 {@link #assembleAndStream}，供 {@link GraphThenEvidenceExecutor} 复用；</li>
+ *   <li>model-usage trace 通过 {@code recorder.traceSink()} 传给 streamText。</li>
  * </ul></p>
  *
  * @author reuben
@@ -66,43 +75,14 @@ public class RagAnswerExecutor implements ConversationExecutor {
                         "RagAnswerExecutor 缺少 executionPlan"));
             }
 
-            // 阶段 1：检索证据
+            // 阶段 1：检索证据（boundedElastic）
             emitThinking(taskInfo, "正在检索相关资料。");
-            List<ChatRetrievalResult> retrievalResults;
-            try {
-                retrievalResults = retrievalAdapter.retrieve(plan, taskInfo);
-            } catch (ChatException e) {
-                emitError(taskInfo, e.getMessage());
-                return Flux.<String>error(e);
-            } catch (Exception e) {
-                ChatException wrapped = new ChatException(ChatErrorCode.RETRIEVE_FAILED, e.getMessage(), e);
-                emitError(taskInfo, wrapped.getMessage());
-                return Flux.<String>error(wrapped);
-            }
-
-            // 阶段 2：去重证据 + emit reference 事件
-            List<SearchReference> references = dedupReferences(retrievalResults);
-            if (!references.isEmpty()) {
-                SinkEmitHelper.emitNext(taskInfo.getSink(),
-                        eventWriter.references(references, taskInfo.getConversationId(), taskInfo.getTurnId()));
-                taskInfo.getReferences().addAll(references);
-            }
-
-            // 阶段 3：无证据 → 拒答
-            if (references.isEmpty()) {
-                recordEvidenceBudget(taskInfo, 0, 0);
-                return Flux.just(NO_EVIDENCE_REPLY);
-            }
-
-            // 阶段 4：组装 prompt
-            ChatRagPromptAssemblyService.AssemblyResult assembly = promptAssemblyService.assemble(
-                    plan, retrievalResults, taskInfo.getCurrentDateText());
-            recordEvidenceBudget(taskInfo,
-                    assembly.getRenderedReferenceCount(), assembly.getOmittedReferenceCount());
-
-            // 阶段 5：流式生成
-            ChatOptions options = buildChatOptions();
-            return observedChatModelService.streamText("RAG_ANSWER", assembly.getUserPrompt(), options)
+            return Mono.fromCallable(() -> retrievalAdapter.retrieve(plan, taskInfo))
+                    .subscribeOn(Schedulers.boundedElastic())
+                    .onErrorMap(ChatException.class, e -> e)
+                    .onErrorMap(Exception.class,
+                            e -> new ChatException(ChatErrorCode.RETRIEVE_FAILED, e.getMessage(), e))
+                    .flatMapMany(results -> afterRetrieval(taskInfo, results))
                     .onErrorResume(error -> {
                         ChatException wrapped = error instanceof ChatException
                                 ? (ChatException) error
@@ -111,6 +91,45 @@ public class RagAnswerExecutor implements ConversationExecutor {
                         return Flux.error(wrapped);
                     });
         });
+    }
+
+    /** 检索后流程：去重 → reference 事件 → 无证据拒答 → 组装 + 流式生成。 */
+    Flux<String> afterRetrieval(ChatTaskInfo taskInfo, List<ChatRetrievalResult> retrievalResults) {
+        // 阶段 2：去重证据 + emit reference 事件
+        List<SearchReference> references = dedupReferences(retrievalResults);
+        if (!references.isEmpty()) {
+            SinkEmitHelper.emitNext(taskInfo.getSink(),
+                    eventWriter.references(references, taskInfo.getConversationId(), taskInfo.getTurnId()));
+            taskInfo.getReferences().addAll(references);
+        }
+
+        // 阶段 3：无证据 → 拒答
+        if (references.isEmpty()) {
+            recordEvidenceBudget(taskInfo, 0, 0);
+            return Flux.just(NO_EVIDENCE_REPLY);
+        }
+        return assembleAndStream(taskInfo, retrievalResults);
+    }
+
+    /** 组装 prompt + 流式生成（共享给 GraphThenEvidenceExecutor）。 */
+    Flux<String> assembleAndStream(ChatTaskInfo taskInfo, List<ChatRetrievalResult> retrievalResults) {
+        ConversationExecutionPlan plan = taskInfo.getExecutionPlan();
+        ChatRagPromptAssemblyService.AssemblyResult assembly = promptAssemblyService.assemble(
+                plan, retrievalResults, taskInfo.getCurrentDateText());
+        recordEvidenceBudget(taskInfo,
+                assembly.getRenderedReferenceCount(), assembly.getOmittedReferenceCount());
+
+        ChatOptions options = buildChatOptions();
+        ChatTraceRecorder recorder = taskInfo.getTraceRecorder();
+        return observedChatModelService.streamText("RAG_ANSWER", assembly.getUserPrompt(), options,
+                        recorder == null ? null : recorder.traceSink())
+                .onErrorResume(error -> {
+                    ChatException wrapped = error instanceof ChatException
+                            ? (ChatException) error
+                            : new ChatException(ChatErrorCode.GENERATION_FAILED, error.getMessage(), error);
+                    emitError(taskInfo, wrapped.getMessage());
+                    return Flux.error(wrapped);
+                });
     }
 
     private List<SearchReference> dedupReferences(List<ChatRetrievalResult> groups) {
@@ -145,8 +164,10 @@ public class RagAnswerExecutor implements ConversationExecutor {
         }
         ChatTraceRecorder.StageHandle stage = recorder.startStage(
                 ChatTraceStageCode.EVIDENCE_BUDGET, "EVIDENCE", "证据门控", null);
-        recorder.completeStage(stage, "证据门控完成",
-                Map.of("rendered", rendered, "omitted", omitted));
+        Map<String, Object> snapshot = new java.util.HashMap<>();
+        snapshot.put("rendered", rendered);
+        snapshot.put("omitted", omitted);
+        recorder.completeStage(stage, "证据门控完成", snapshot);
     }
 
     private void emitThinking(ChatTaskInfo taskInfo, String text) {
@@ -165,3 +186,4 @@ public class RagAnswerExecutor implements ConversationExecutor {
                 eventWriter.error(message, taskInfo.getConversationId(), taskInfo.getTurnId()));
     }
 }
+

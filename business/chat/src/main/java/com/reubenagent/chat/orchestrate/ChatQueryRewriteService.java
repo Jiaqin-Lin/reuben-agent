@@ -12,6 +12,7 @@ import com.reubenagent.chat.support.ChatPromptNames;
 import com.reubenagent.chat.support.ChatPromptTemplateService;
 import com.reubenagent.chat.support.ChatTexts;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -19,6 +20,8 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -40,6 +43,7 @@ import java.util.regex.Pattern;
  */
 @Slf4j
 @Service
+@AllArgsConstructor
 public class ChatQueryRewriteService {
 
     private static final Pattern NUMBERED_MULTI_QUESTION_PATTERN =
@@ -50,16 +54,6 @@ public class ChatQueryRewriteService {
     private final ChatProperties properties;
     private final ChatPromptTemplateService promptTemplateService;
     private final ChatJsonCodec jsonCodec;
-
-    public ChatQueryRewriteService(ObservedChatModelService observedChatModelService,
-                                   ChatProperties properties,
-                                   ChatPromptTemplateService promptTemplateService,
-                                   ChatJsonCodec jsonCodec) {
-        this.observedChatModelService = observedChatModelService;
-        this.properties = properties;
-        this.promptTemplateService = promptTemplateService;
-        this.jsonCodec = jsonCodec;
-    }
 
     /**
      * 改写主入口。
@@ -84,32 +78,37 @@ public class ChatQueryRewriteService {
 
         ChatTraceRecorder.StageHandle stage = traceRecorder == null ? null
                 : traceRecorder.startStage(com.reubenagent.chat.enums.ChatTraceStageCode.REWRITE,
-                "rewrite", "查询改写开始", Map.of("questionLen", normalized.length()));
+                "rewrite", "查询改写开始", Collections.singletonMap("questionLen", normalized.length()));
 
         if (!Boolean.TRUE.equals(cfg.getEnabled()) || !needsRewrite(normalized, historySummary, cfg)) {
             ChatRewriteResult fallback = ruleFallback(normalized, cfg);
             log.info("查询改写跳过 → question='{}' rewrite='{}' subs={}",
                     normalized, fallback.getRewrittenQuery(), fallback.getSubQuestions());
             if (traceRecorder != null) {
-                traceRecorder.completeStage(stage, "改写跳过（规则）", Map.of(
-                        "usedRewrite", false, "subCount", fallback.getSubQuestions().size()));
+                Map<String, Object> skipSnapshot = new HashMap<>();
+                skipSnapshot.put("usedRewrite", false);
+                skipSnapshot.put("subCount", fallback.getSubQuestions().size());
+                traceRecorder.completeStage(stage, "改写跳过（规则）", skipSnapshot);
             }
             return fallback;
         }
 
         try {
-            String prompt = promptTemplateService.render(ChatPromptNames.CHAT_QUERY_REWRITE, Map.of(
-                    "history", historySummary.isBlank() ? "无历史上下文" : historySummary,
-                    "question", normalized
-            ));
-            String raw = observedChatModelService.callText("rewrite", prompt, buildRewriteOptions(cfg));
+            Map<String, String> promptVars = new HashMap<>();
+            promptVars.put("history", historySummary.isBlank() ? "无历史上下文" : historySummary);
+            promptVars.put("question", normalized);
+            String prompt = promptTemplateService.render(ChatPromptNames.CHAT_QUERY_REWRITE, promptVars);
+            String raw = observedChatModelService.callText("rewrite", prompt, buildRewriteOptions(cfg),
+                    traceRecorder == null ? null : traceRecorder.traceSink());
             ChatRewriteResult parsed = normalizeRewriteResult(normalized, raw, cfg);
             if (parsed != null && !parsed.getRewrittenQuery().isBlank()) {
                 log.info("查询改写完成 → question='{}' rewrite='{}' subs={}",
                         normalized, parsed.getRewrittenQuery(), parsed.getSubQuestions());
                 if (traceRecorder != null) {
-                    traceRecorder.completeStage(stage, "改写完成", Map.of(
-                            "usedRewrite", true, "subCount", parsed.getSubQuestions().size()));
+                    Map<String, Object> okSnapshot = new HashMap<>();
+                    okSnapshot.put("usedRewrite", true);
+                    okSnapshot.put("subCount", parsed.getSubQuestions().size());
+                    traceRecorder.completeStage(stage, "改写完成", okSnapshot);
                 }
                 return parsed;
             }
@@ -121,8 +120,10 @@ public class ChatQueryRewriteService {
 
         ChatRewriteResult fallback = ruleFallback(normalized, cfg);
         if (traceRecorder != null) {
-            traceRecorder.completeStage(stage, "改写回退（规则）", Map.of(
-                    "usedRewrite", false, "subCount", fallback.getSubQuestions().size()));
+            Map<String, Object> fbSnapshot = new HashMap<>();
+            fbSnapshot.put("usedRewrite", false);
+            fbSnapshot.put("subCount", fallback.getSubQuestions().size());
+            traceRecorder.completeStage(stage, "改写回退（规则）", fbSnapshot);
         }
         return fallback;
     }

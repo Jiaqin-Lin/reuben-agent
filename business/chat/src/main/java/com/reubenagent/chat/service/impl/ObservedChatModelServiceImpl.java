@@ -19,17 +19,18 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 /**
  * {@link ObservedChatModelService} 默认实现 —— 包装 DeepSeek {@link ChatModel}，统一追踪每次调用。
  *
  * <p>provider 解析：主 ChatModel 一次性取实现类简名缓存；成本查 {@link ChatProperties.Pricing}，
  * 未配置返回 null。</p>
+ *
+ * <p><b>Phase 8 model-usage 作用域修正</b>：删除 service 级共享 {@code usageTraces} list，
+ * 改用 {@code Consumer<ChatModelUsageTrace>} 回调参数，由 {@code ChatTraceRecorder.traceSink()}
+ * 提供 per-turn 隔离的 sink。旧 {@code recordUsageTrace} 方法保留为 no-op 兼容签名。</p>
  *
  * @author reuben
  * @since 2026-06-24
@@ -47,9 +48,6 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
     /** 主模型默认 model 名（取自 defaultOptions，可能为 null） */
     private final String primaryDefaultModel;
 
-    /** 本轮调用追踪累积（Phase 8 由 ChatTraceRecorder 持有，此处保留线程安全结构供 recordUsageTrace） */
-    private final List<ChatModelUsageTrace> usageTraces = new CopyOnWriteArrayList<>();
-
     public ObservedChatModelServiceImpl(@Qualifier("deepSeekChatModel") ChatModel primaryModel,
                                         ObjectProvider<ChatModel> alternateModels,
                                         ChatProperties properties) {
@@ -64,19 +62,27 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
 
     @Override
     public String callText(String stageName, String prompt, ChatOptions options) {
+        return callText(stageName, prompt, options, null);
+    }
+
+    @Override
+    public String callText(String stageName, String prompt, ChatOptions options,
+                           Consumer<ChatModelUsageTrace> traceSink) {
         long start = System.currentTimeMillis();
         Prompt aiPrompt = buildPrompt(prompt, options);
         try {
             ChatResponse response = primaryModel.call(aiPrompt);
             String text = extractText(response);
-            recordTrace(stageName, response, System.currentTimeMillis() - start, ChatModelCallStatus.COMPLETED, null);
+            recordTrace(stageName, response, System.currentTimeMillis() - start,
+                    ChatModelCallStatus.COMPLETED, null, traceSink);
             return text;
         } catch (ChatException e) {
-            recordTrace(stageName, null, System.currentTimeMillis() - start, ChatModelCallStatus.FAILED, e.getMessage());
+            recordTrace(stageName, null, System.currentTimeMillis() - start,
+                    ChatModelCallStatus.FAILED, e.getMessage(), traceSink);
             throw e;
         } catch (Exception e) {
             long duration = System.currentTimeMillis() - start;
-            recordTrace(stageName, null, duration, ChatModelCallStatus.FAILED, e.getMessage());
+            recordTrace(stageName, null, duration, ChatModelCallStatus.FAILED, e.getMessage(), traceSink);
             log.warn("模型阻塞调用失败 → stage={} duration={}ms err={}", stageName, duration, e.getMessage());
             throw new ChatException(ChatErrorCode.MODEL_CALL_FAILED, stageName, e);
         }
@@ -84,6 +90,12 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
 
     @Override
     public Flux<String> streamText(String stageName, String prompt, ChatOptions options) {
+        return streamText(stageName, prompt, options, null);
+    }
+
+    @Override
+    public Flux<String> streamText(String stageName, String prompt, ChatOptions options,
+                                   Consumer<ChatModelUsageTrace> traceSink) {
         long start = System.currentTimeMillis();
         Prompt aiPrompt = buildPrompt(prompt, options);
         // 阶段：用 volatile 标志保证 complete/error/cancel 三种终态只落一次 trace
@@ -93,14 +105,14 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
                 .doOnError(error -> {
                     if (traced.compareAndSet(false, true)) {
                         recordTrace(stageName, null, System.currentTimeMillis() - start,
-                                ChatModelCallStatus.FAILED, error.getMessage());
+                                ChatModelCallStatus.FAILED, error.getMessage(), traceSink);
                     }
                     log.warn("模型流式调用失败 → stage={} err={}", stageName, error.getMessage());
                 })
                 .doOnComplete(() -> {
                     if (traced.compareAndSet(false, true)) {
                         recordTrace(stageName, null, System.currentTimeMillis() - start,
-                                ChatModelCallStatus.COMPLETED, null);
+                                ChatModelCallStatus.COMPLETED, null, traceSink);
                     }
                 })
                 .doFinally(signal -> {
@@ -108,18 +120,11 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
                     if (signal == reactor.core.publisher.SignalType.CANCEL
                             && traced.compareAndSet(false, true)) {
                         recordTrace(stageName, null, System.currentTimeMillis() - start,
-                                ChatModelCallStatus.FAILED, "客户端取消流式调用");
+                                ChatModelCallStatus.FAILED, "客户端取消流式调用", traceSink);
                     }
                 })
                 .onErrorResume(error -> Flux.error(
                         new ChatException(ChatErrorCode.MODEL_CALL_FAILED, stageName, error)));
-    }
-
-    @Override
-    public void recordUsageTrace(ChatModelUsageTrace trace) {
-        if (trace != null) {
-            usageTraces.add(trace);
-        }
     }
 
     // ======================== 内部方法 ========================
@@ -140,9 +145,10 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
         return text != null ? text : "";
     }
 
-    /** 落一条模型调用追踪。response 可为 null（失败场景）。 */
+    /** 落一条模型调用追踪。response 可为 null（失败场景）。traceSink 可为 null（不回调）。 */
     private void recordTrace(String stageName, ChatResponse response, long durationMs,
-                             ChatModelCallStatus status, String errorMessage) {
+                             ChatModelCallStatus status, String errorMessage,
+                             Consumer<ChatModelUsageTrace> traceSink) {
         try {
             String model = primaryDefaultModel;
             Integer promptTokens = null;
@@ -174,7 +180,9 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
                     .status(status)
                     .errorMessage(errorMessage)
                     .build();
-            usageTraces.add(trace);
+            if (traceSink != null) {
+                traceSink.accept(trace);
+            }
         } catch (Exception e) {
             // 阶段：追踪落库失败不中断主流程
             log.warn("模型调用追踪记录失败 → stage={} err={}", stageName, e.getMessage());
@@ -227,10 +235,5 @@ public class ObservedChatModelServiceImpl implements ObservedChatModelService {
         } catch (Exception e) {
             return null;
         }
-    }
-
-    /** 供 ChatTraceRecorder 快照累积的追踪（Phase 8 接入）。 */
-    public List<ChatModelUsageTrace> snapshotUsageTraces() {
-        return Collections.unmodifiableList(usageTraces);
     }
 }

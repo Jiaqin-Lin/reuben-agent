@@ -4,6 +4,8 @@ import com.reubenagent.chat.model.debug.ChatModelUsageTrace;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import reactor.core.publisher.Flux;
 
+import java.util.function.Consumer;
+
 /**
  * 带全链路观测的 LLM 调用封装 —— 统一 token / 成本 / 耗时追踪入口。
  *
@@ -14,6 +16,9 @@ import reactor.core.publisher.Flux;
  *   <li>{@code streamText} 在 {@code doFinally}（覆盖 cancel/complete/error）落 trace，修正 cancel 丢 trace；</li>
  *   <li>成本按 {@link com.reubenagent.chat.config.ChatProperties.Pricing} 查表，未配置返回 null，不硬编码厂商价格。</li>
  * </ul></p>
+ *
+ * <p><b>Phase 8 model-usage 作用域修正</b>：新增带 {@code Consumer<ChatModelUsageTrace>} sink 的重载，
+ * 由 {@code ChatTraceRecorder.traceSink()} 提供 per-turn 通道；旧重载保留（sink=null）。</p>
  *
  * @author reuben
  * @since 2026-06-24
@@ -31,12 +36,29 @@ public interface ObservedChatModelService {
     String callText(String stageName, String prompt, ChatOptions options);
 
     /**
+     * 阻塞式文本调用（带 per-turn 追踪 sink）。
+     *
+     * @param traceSink 接收单次调用的 {@link ChatModelUsageTrace}，null 表示不回调
+     */
+    default String callText(String stageName, String prompt, ChatOptions options,
+                            Consumer<ChatModelUsageTrace> traceSink) {
+        return callText(stageName, prompt, options);
+    }
+
+    /**
      * 流式文本调用，逐块产出文本。
      *
      * <p>trace 在 {@code doFinally} 中落库（覆盖 complete / error / cancel）。</p>
      */
     Flux<String> streamText(String stageName, String prompt, ChatOptions options);
 
-    /** 追加一条模型调用追踪（供 Agent 多次调用累计）。 */
-    void recordUsageTrace(ChatModelUsageTrace trace);
+    /**
+     * 流式文本调用（带 per-turn 追踪 sink）。
+     *
+     * @param traceSink 接收单次调用的 {@link ChatModelUsageTrace}，null 表示不回调
+     */
+    default Flux<String> streamText(String stageName, String prompt, ChatOptions options,
+                                    Consumer<ChatModelUsageTrace> traceSink) {
+        return streamText(stageName, prompt, options);
+    }
 }

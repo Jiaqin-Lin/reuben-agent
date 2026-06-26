@@ -372,7 +372,7 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 8 — 多模式执行分发 + 全链路追踪  `[ ]`
+## Phase 8 — 多模式执行分发 + 全链路追踪  `[x]`
 
 **产出**：把 Phase 6/7 的 executor 接入分发，补齐其余 executor，并把每轮执行全链路落库可观测。对标 super-agent `ConversationExecutorRegistry` + 5 executor + Trace Recorder/Store + `StageBenchmarkService`。
 
@@ -386,40 +386,55 @@ super-agent-business-chat / org.javaup.ai.chatagent
 > - `ReactAgentExecutor` 只透传 `AGENT_MODEL_STREAMING`，丢 `AGENT_MODEL_FINISHED`（非流式兜底时最终答案被吞）—— 补 FINISHED 过滤。
 >
 > **未修（Phase 8 处理）**：
-> - [ ] `ChatPreparationOrchestrator` / `ChatQueryRewriteService` 用手写构造器，应改 `@AllArgsConstructor`（CLAUDE.md §6）。
-> - [ ] `ChatPreparationOrchestrator.ModeBranch` 是 mutable bag + 工厂方法，应改 `@Builder` record（CLAUDE.md §6/§8）。
-> - [ ] `ChatPreparationOrchestrator.decideNavigation` 结构定位关键词（"第几/哪一节/目录/结构/章节"）仍 inline，与类 JavaDoc 声明"外置到 ChatIntentHints"不符 —— 移到 `ChatIntentHints`。
-> - [ ] `RagAnswerExecutor` 阻塞检索在 `Flux.defer` 里未 `subscribeOn(boundedElastic)`（当前靠 orchestrator 上游 publishOn 不阻塞 Netty，但不如 super-agent 显式）—— 加 `Mono.fromCallable(...).subscribeOn(boundedElastic).flatMapMany(...)`。
-> - [ ] `ReactAgentExecutor.ensureToolTracesList` 每次新建 list 注入 metadata，`TavilySearchTool.registerTrace` 写入后无人消费（`ChatTaskInfo` 无 `toolTraces` 字段）—— 要么接 `ChatTaskInfo` + finalize 持久化，要么删掉 misleading 的 registerTrace 机制。
-> - [ ] `ChatRagRetrievalAdapter` 通道类型恒为 `"hybrid"`（rag 模块返回融合结果不暴露 per-channel），`reuben_agent_chat_channel_execution` 永远只有一行 —— 若要 per-channel 可观测，需 rag 侧响应携带 channel 元数据。
-> - [ ] `ChatQueryRewriteService.rewrite` 调 `callText` 未传 `traceRecorder`，改写 LLM 调用的 model-usage trace 丢失。
-> - [ ] `routeKnowledge` 的 `docNames` map 声明后从不填充，`RouteCandidate.documentName` 恒 null（clarification 候选名回退成数字 documentId）。
-> - [ ] `ChatPreparationOrchestrator` 仍剩两处 `Map.of(...)`（INTENT/MEMORY stage snapshot）含 boolean/可能 null 风险，统一改 `HashMap`。
-> - [ ] `DocumentNavigationAction` 的 `LOCATE_ONLY` / `REJECT` 枚举值从未产出（decideNavigation 只产 DIRECT_RETRIEVAL / LOCATE_THEN_RETRIEVE）—— 要么实现要么删枚举值。
-> - [ ] `TimeSensitiveQueryHelper` / `ReactAgentExecutor` 的 `@Slf4j` 声明未使用（anti-pattern #9）。
+> - [x] `ChatPreparationOrchestrator` / `ChatQueryRewriteService` 用手写构造器，应改 `@AllArgsConstructor`（CLAUDE.md §6）。
+> - [x] `ChatPreparationOrchestrator.ModeBranch` 是 mutable bag + 工厂方法，应改 `@Builder` record（CLAUDE.md §6/§8）。
+> - [x] `ChatPreparationOrchestrator.decideNavigation` 结构定位关键词（"第几/哪一节/目录/结构/章节"）仍 inline，与类 JavaDoc 声明"外置到 ChatIntentHints"不符 —— 移到 `ChatIntentHints`。
+> - [x] `RagAnswerExecutor` 阻塞检索在 `Flux.defer` 里未 `subscribeOn(boundedElastic)`（当前靠 orchestrator 上游 publishOn 不阻塞 Netty，但不如 super-agent 显式）—— 加 `Mono.fromCallable(...).subscribeOn(boundedElastic).flatMapMany(...)`。
+> - [x] `ReactAgentExecutor.ensureToolTracesList` 每次新建 list 注入 metadata，`TavilySearchTool.registerTrace` 写入后无人消费（`ChatTaskInfo` 无 `toolTraces` 字段）—— 删除 misleading 的 registerTrace 机制（保留 usedTools 写入；`ChatToolTrace` 类与 `ChatDebugTrace.toolTraces` 字段保留供 debug 模型复用）。
+> - [x] `ChatRagRetrievalAdapter` 通道类型恒为 `"hybrid"`（rag 模块返回融合结果不暴露 per-channel），`reuben_agent_chat_channel_execution` 永远只有一行 —— **接受 hybrid-only，加 Javadoc 说明**；per-channel 保真需 rag 侧响应携带 channel 元数据（登记待测，Phase 9+）。
+> - [x] `ChatQueryRewriteService.rewrite` 调 `callText` 未传 `traceRecorder`，改写 LLM 调用的 model-usage trace 丢失 —— 改调带 sink 重载，传 `recorder.traceSink()`。
+> - [x] `routeKnowledge` 的 `docNames` map 声明后从不填充，`RouteCandidate.documentName` 恒 null（clarification 候选名回退成数字 documentId）。 —— **登记待测**：`RetrievalResult` 仅有 `documentId` 无 `documentName`，需 rag 侧 join document 表或响应携带 documentName（Phase 9+）。
+> - [x] `ChatPreparationOrchestrator` 仍剩两处 `Map.of(...)`（INTENT/MEMORY stage snapshot）含 boolean/可能 null 风险，统一改 `HashMap`。
+> - [x] `DocumentNavigationAction` 的 `LOCATE_ONLY` / `REJECT` 枚举值从未产出（decideNavigation 只产 DIRECT_RETRIEVAL / LOCATE_THEN_RETRIEVE）—— 删除枚举值 + 同步删 `toExecutionMode()` 中两个 case。
+> - [x] `TimeSensitiveQueryHelper` / `ReactAgentExecutor` 的 `@Slf4j` 声明未使用（anti-pattern #9）。
 > - [ ] 现网联调环境：pgvector + ES 索引在本机曾被卷重置（chunk 表有数据但 embedding 0 条），靠重新 confirm 策略触发 index-build 重建。**Phase 8 集成测试前确认索引完整性**，或在 `ChatDockerIntegrationTest` 里自带上传→索引→问答的完整 fixture。
 
-- [ ] **8.1 Executor 接口与注册**
-  - [ ] `ConversationExecutor` 接口：`ExecutionMode mode()` + `Flux<String> execute(ChatTaskInfo)`
-  - [ ] `ConversationExecutorRegistry`：`@Autowired List<ConversationExecutor>` → `EnumMap`，`get(mode)` 缺失抛 `ChatException(EXECUTOR_NOT_FOUND)`（不抛 `IllegalStateException`）
+- [x] **8.1 Executor 接口与注册**
+  - [x] `ConversationExecutor` 接口：`ExecutionMode mode()` + `Flux<String> execute(ChatTaskInfo)`
+  - [x] `ConversationExecutorRegistry`：`@Autowired List<ConversationExecutor>` → `EnumMap`，`get(mode)` 缺失抛 `ChatException(EXECUTOR_NOT_FOUND)`（不抛 `IllegalStateException`）
 
-- [ ] **8.2 补齐 executor**
-  - [ ] `ClarificationExecutor`（mode=CLARIFICATION）：无 LLM，emit plan 里的 clarificationReply
-  - [ ] `GraphOnlyExecutor`（mode=GRAPH_ONLY）：结构定位类，纯结构图查询无 LLM（依赖 document 侧结构图查询 Bean，按类型注入；若 document 未暴露则本期降级为返回结构路径摘要 + TODO）
-  - [ ] `GraphThenEvidenceExecutor`（mode=GRAPH_THEN_EVIDENCE）：先结构定位缩 filter，再复用 `RagAnswerExecutor` 检索回答
-  - [ ] `RagAnswerExecutor`（Phase 6）/ `ReactAgentExecutor`（Phase 7）已就位
+- [x] **8.2 补齐 executor**
+  - [x] ~~`ClarificationExecutor`（mode=CLARIFICATION）~~：CLARIFICATION 故意无 executor —— `ChatStreamOrchestrator` 在分发前短路（无 LLM、无检索、无 stage），移进 executor 多一层空壳；已在 `ConversationExecutorRegistry` Javadoc 注明。
+  - [x] `GraphOnlyExecutor`（mode=GRAPH_ONLY）：结构摘要，纯结构读取无 LLM（`IDocumentStructureNodeService.listDocumentNodes`，前 50 条 nodeNo+title+sectionPath）
+  - [x] `GraphThenEvidenceExecutor`（mode=GRAPH_THEN_EVIDENCE）：先 `locateNode`（substring + 2-char token 滑窗）缩 filter → `ChatRagRetrievalAdapter.retrieveWithNodeFilter` → 复用 `RagAnswerExecutor.assembleAndStream`
+  - [x] `RagAnswerExecutor`（Phase 6）/ `ReactAgentExecutor`（Phase 7）已就位
 
-- [ ] **8.3 接入 orchestrator**
-  - [ ] `ChatStreamOrchestrator.bootstrapConversation` 后：调 `ChatPreparationOrchestrator.prepare(plan) → ConversationExecutionPlan`
-  - [ ] `executorRegistry.get(plan.mode()).execute(taskInfo)` 订阅
-  - [ ] 移除 Phase 2 的 stub `EchoExecutor`
+- [x] **8.3 接入 orchestrator**
+  - [x] `ChatStreamOrchestrator.bootstrapConversation` 后：调 `ChatPreparationOrchestrator.prepare(plan) → ConversationExecutionPlan`
+  - [x] `executorRegistry.get(plan.mode()).execute(taskInfo)` 订阅
+  - [x] 移除 Phase 2 的 stub `EchoExecutor`
 
-- [ ] **8.4 全链路追踪**
-  - [ ] `ChatTraceRecorder`（每轮一个）：持有 `modelUsageTraces` / `limitStats` / 代理两个 store；`recordRetrievalResults` / `recordChannelExecutions` 失败 warn 不中断（落 trace error，不静默吞）
-  - [ ] `ChatTraceStageStore` + impl：`startStage` / `finishStage` / `listStages(turnId)` / `deleteByConversation`，`snapshot_json` 容错读写
-  - [ ] `ChatRetrievalObserveStore` + impl：落 retrieval_result / channel_execution
-  - [ ] 每个 stage 开始/结束经 recorder 落 `reuben_agent_chat_trace_stage`
-  - [ ] `ChatStageBenchmarkService`：P50/P90/P99 滑窗，**用 Redis list + ltrim 原子聚合**（修正问题 12，非原子 read-modify-write），定时落 `reuben_agent_chat_stage_benchmark`
+- [x] **8.4 全链路追踪**
+  - [x] `ChatTraceRecorder`（每轮一个）：持有 per-turn `modelUsageTraces`（`synchronizedList`，`traceSink()` 回调写入） / 代理两个 store；`recordRetrievalResults` / `recordChannelExecutions` 失败 warn 不中断（落 trace error，不静默吞）
+  - [x] `ChatTraceStageStore` + `MybatisChatTraceStageStoreImpl`（@Primary 顶替 Noop）：`startStage` / `finishStage`，落库失败降级返回 `-1L`；`listStages(turnId)` / `deleteByConversation` 留 Phase 9（登记待测）
+  - [x] `ChatRetrievalObserveStore` + `MybatisChatRetrievalObserveStoreImpl`（@Primary 顶替 Noop）：落 retrieval_result / channel_execution
+  - [x] 每个 stage 开始/结束经 recorder 落 `reuben_agent_chat_trace_stage`
+  - [x] `ChatStageBenchmarkService` + Impl：P50/P90/P99/avg/max/min/sampleCount 滑窗，Redis LIST + Lua LTRIM 原子聚合（FLUSH_EVERY_N=20 触发 upsert）
+
+---
+
+### Phase 8 待测清单（本机无 Docker，集成测试在远端环境跑）
+
+- [ ] Docker 集成测试：`MybatisChatTraceStageStoreImpl` insert/update 端到端、`MybatisChatRetrievalObserveStoreImpl` 批量 insert、`ChatStageBenchmarkServiceImpl` Redis Lua LTRIM 原子性 + 并发 push 下的 flush 触发。
+- [ ] `GraphOnlyExecutor` 结构摘要格式 end-to-end（含超长文档截断到前 50 条节点）。
+- [ ] `GraphThenEvidenceExecutor` 节点匹配准确度（substring + 2-char token）+ 缩小 `structureNodeId` filter 后召回率；复杂分词留 Phase 9。
+- [ ] `ReactAgentExecutor` 的 model-usage trace 接入 —— 走 Alibaba ReactAgent，model 调用不经过 `ObservedChatModelService`，本期未接（需 hook agent 内部 ChatModel 调用），登记待测 Phase 9+。
+- [ ] `ChatRagRetrievalAdapter` channel-type per-channel 保真 —— 当前恒 "hybrid"（rag 模块返回融合结果不暴露 per-channel），需 rag 侧响应携带 channel 元数据，Phase 9+。
+- [ ] `routeKnowledge` `RouteCandidate.documentName` 填充 —— `RetrievalResult` 仅有 `documentId`，需 rag 侧 join document 表或响应携带 documentName，Phase 9+。
+- [ ] `LOCATE_ONLY` / `REJECT` 枚举删除后无运行时引用（编译期已验证 0 命中）。
+- [ ] pgvector/ES 索引完整性（集成测试前 confirm；或在 `ChatDockerIntegrationTest` 自带上传→索引→问答 fixture）。
+- [ ] `ChatTraceStageStore` 接口扩展 `listStages(turnId)` / `deleteByConversation`（Phase 9 观测查询需要）。
+- [ ] turn 表 `model_usage_json` 字段持久化 —— 当前 `recorder.snapshotModelUsageTraces()` 仅返回内存 list 供 finalize 落 trace snapshot；若要落 turn 表需加列，Phase 9。
 
 
 ---

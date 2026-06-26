@@ -17,6 +17,7 @@ import com.reubenagent.rag.dto.RagRetrieveRequest;
 import com.reubenagent.rag.model.RetrievalResult;
 import com.reubenagent.rag.service.IRagRetrievalService;
 import com.reubenagent.rag.vo.RagRetrieveResponse;
+import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -25,7 +26,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 /**
  * 对话准备编排器 —— 决定"这一轮怎么回答"的大脑。
  *
@@ -50,22 +50,13 @@ import java.util.Map;
  */
 @Slf4j
 @Service
+@AllArgsConstructor
 public class ChatPreparationOrchestrator {
 
     private final IChatMemoryService memoryService;
     private final ChatQueryRewriteService rewriteService;
     private final IRagRetrievalService ragRetrievalService;
     private final ChatProperties properties;
-
-    public ChatPreparationOrchestrator(IChatMemoryService memoryService,
-                                       ChatQueryRewriteService rewriteService,
-                                       IRagRetrievalService ragRetrievalService,
-                                       ChatProperties properties) {
-        this.memoryService = memoryService;
-        this.rewriteService = rewriteService;
-        this.ragRetrievalService = ragRetrievalService;
-        this.properties = properties;
-    }
 
     /**
      * 准备一轮对话的执行计划。
@@ -84,9 +75,10 @@ public class ChatPreparationOrchestrator {
         ChatTraceRecorder.StageHandle intentStage = traceRecorder == null ? null
                 : traceRecorder.startStage(ChatTraceStageCode.INTENT, "intent", "意图识别", null);
         if (traceRecorder != null) {
-            traceRecorder.completeStage(intentStage, "意图识别完成", Map.of(
-                    "chatMode", launchPlan.getChatMode().name(),
-                    "skipRewrite", skipRewrite));
+            Map<String, Object> snapshot = new HashMap<>();
+            snapshot.put("chatMode", launchPlan.getChatMode().name());
+            snapshot.put("skipRewrite", skipRewrite);
+            traceRecorder.completeStage(intentStage, "意图识别完成", snapshot);
         }
 
         // 第 3 步：查询改写
@@ -107,9 +99,10 @@ public class ChatPreparationOrchestrator {
         try {
             ChatMemoryContext ctx = memoryService.loadMemoryContext(conversationId, traceRecorder);
             if (traceRecorder != null) {
-                traceRecorder.completeStage(stage, "记忆加载完成", Map.of(
-                        "hasSummary", ctx != null && ctx.getLongTermSummary() != null && !ctx.getLongTermSummary().isBlank(),
-                        "recentTurns", ctx == null || ctx.getRecentTurns() == null ? 0 : ctx.getRecentTurns().size()));
+                Map<String, Object> snapshot = new HashMap<>();
+                snapshot.put("hasSummary", ctx != null && ctx.getLongTermSummary() != null && !ctx.getLongTermSummary().isBlank());
+                snapshot.put("recentTurns", ctx == null || ctx.getRecentTurns() == null ? 0 : ctx.getRecentTurns().size());
+                traceRecorder.completeStage(stage, "记忆加载完成", snapshot);
             }
             return ctx;
         } catch (Exception e) {
@@ -143,9 +136,9 @@ public class ChatPreparationOrchestrator {
         ModeBranch branch = doModeBranch(plan, rewrite, traceRecorder);
         if (traceRecorder != null) {
             Map<String, Object> snapshot = new HashMap<>();
-            snapshot.put("executionMode", branch.executionMode.name());
-            snapshot.put("selectedDocumentId", branch.selectedDocumentId);
-            snapshot.put("isClarification", branch.executionMode == ExecutionMode.CLARIFICATION);
+            snapshot.put("executionMode", branch.executionMode().name());
+            snapshot.put("selectedDocumentId", branch.selectedDocumentId());
+            snapshot.put("isClarification", branch.executionMode() == ExecutionMode.CLARIFICATION);
             traceRecorder.completeStage(routeStage, "路由完成", snapshot);
         }
         return branch;
@@ -243,8 +236,7 @@ public class ChatPreparationOrchestrator {
     private DocumentNavigationDecision decideNavigation(Long documentId, ChatRewriteResult rewrite,
                                                         ChatTraceRecorder traceRecorder) {
         String q = rewrite == null ? "" : rewrite.getRewrittenQuery();
-        boolean structureHint = q.contains("第几") || q.contains("哪一节") || q.contains("哪个章节")
-                || q.contains("目录") || q.contains("结构") || q.contains("在哪一") || q.contains("章节");
+        boolean structureHint = ChatIntentHints.matchesStructure(q);
         DocumentNavigationAction action = structureHint
                 ? DocumentNavigationAction.LOCATE_THEN_RETRIEVE
                 : DocumentNavigationAction.DIRECT_RETRIEVAL;
@@ -258,21 +250,21 @@ public class ChatPreparationOrchestrator {
     private ConversationExecutionPlan buildPlan(StreamLaunchPlan plan, ChatMemoryContext memory,
                                                  ChatRewriteResult rewrite, ModeBranch branch) {
         return ConversationExecutionPlan.builder()
-                .executionMode(branch.executionMode)
+                .executionMode(branch.executionMode())
                 .chatMode(plan.getChatMode())
                 .originalQuestion(plan.getQuestion())
                 .rewrittenQuery(rewrite.getRewrittenQuery())
                 .subQuestions(rewrite.getSubQuestions())
                 .rewriteResult(rewrite)
-                .selectedDocumentId(branch.selectedDocumentId)
-                .selectedDocumentName(branch.selectedDocumentName)
-                .routeTopScore(branch.topScore)
-                .routeSecondScore(branch.secondScore)
-                .routeConfidence(branch.confidence)
-                .navigationDecision(branch.navigationDecision)
-                .clarificationReply(branch.clarificationReply)
-                .clarificationOptions(branch.clarificationOptions)
-                .clarificationReason(branch.clarificationReason)
+                .selectedDocumentId(branch.selectedDocumentId())
+                .selectedDocumentName(branch.selectedDocumentName())
+                .routeTopScore(branch.topScore())
+                .routeSecondScore(branch.secondScore())
+                .routeConfidence(branch.confidence())
+                .navigationDecision(branch.navigationDecision())
+                .clarificationReply(branch.clarificationReply())
+                .clarificationOptions(branch.clarificationOptions())
+                .clarificationReason(branch.clarificationReason())
                 .longTermSummary(memory == null ? null : memory.getLongTermSummary())
                 .recentTranscript(memory == null ? null : memory.getRecentTranscript())
                 .build();
@@ -280,44 +272,45 @@ public class ChatPreparationOrchestrator {
 
     // ======================== 内部结构 ========================
 
-    private static class ModeBranch {
-        ExecutionMode executionMode;
-        Long selectedDocumentId;
-        String selectedDocumentName;
-        DocumentNavigationDecision navigationDecision;
-        String clarificationReply;
-        List<String> clarificationOptions;
-        String clarificationReason;
-        Double topScore;
-        Double secondScore;
-        Double confidence;
+    @lombok.Builder
+    private record ModeBranch(
+            ExecutionMode executionMode,
+            Long selectedDocumentId,
+            String selectedDocumentName,
+            DocumentNavigationDecision navigationDecision,
+            String clarificationReply,
+            List<String> clarificationOptions,
+            String clarificationReason,
+            Double topScore,
+            Double secondScore,
+            Double confidence
+    ) {
 
         static ModeBranch of(ExecutionMode mode, Long docId, String docName, DocumentNavigationDecision nav) {
-            ModeBranch b = new ModeBranch();
-            b.executionMode = mode;
-            b.selectedDocumentId = docId;
-            b.selectedDocumentName = docName;
-            b.navigationDecision = nav;
-            b.clarificationOptions = List.of();
-            return b;
+            return ModeBranch.builder()
+                    .executionMode(mode)
+                    .selectedDocumentId(docId)
+                    .selectedDocumentName(docName)
+                    .navigationDecision(nav)
+                    .clarificationOptions(List.of())
+                    .build();
         }
 
         static ModeBranch clarification(StreamLaunchPlan plan, String reply, List<String> options, String reason) {
-            ModeBranch b = new ModeBranch();
-            b.executionMode = ExecutionMode.CLARIFICATION;
-            b.selectedDocumentId = plan.getSelectedDocumentId();
-            b.selectedDocumentName = plan.getSelectedDocumentName();
-            b.clarificationReply = reply;
-            b.clarificationOptions = options == null ? List.of() : options;
-            b.clarificationReason = reason;
-            return b;
+            return ModeBranch.builder()
+                    .executionMode(ExecutionMode.CLARIFICATION)
+                    .selectedDocumentId(plan.getSelectedDocumentId())
+                    .selectedDocumentName(plan.getSelectedDocumentName())
+                    .clarificationReply(reply)
+                    .clarificationOptions(options == null ? List.of() : options)
+                    .clarificationReason(reason)
+                    .build();
         }
 
         ModeBranch withRoute(Double top, Double second, Double conf) {
-            this.topScore = top;
-            this.secondScore = second;
-            this.confidence = conf;
-            return this;
+            return new ModeBranch(executionMode, selectedDocumentId, selectedDocumentName,
+                    navigationDecision, clarificationReply, clarificationOptions, clarificationReason,
+                    top, second, conf);
         }
     }
 

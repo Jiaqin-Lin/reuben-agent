@@ -18,17 +18,13 @@ import com.reubenagent.chat.support.ChatPromptTemplateService;
 import com.reubenagent.chat.support.ChatStreamEventWriter;
 import com.reubenagent.chat.support.SinkEmitHelper;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.messages.AssistantMessage;
-import org.springframework.ai.chat.messages.Message;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -58,7 +54,6 @@ import java.util.Map;
  * @author reuben
  * @since 2026-06-25
  */
-@Slf4j
 @Component
 public class ReactAgentExecutor implements ConversationExecutor {
 
@@ -189,15 +184,10 @@ public class ReactAgentExecutor implements ConversationExecutor {
     // ======================== RunnableConfig 装配（metadata 透传 ToolContext）========================
 
     private RunnableConfig buildRunnableConfig(ChatTaskInfo taskInfo, ConversationExecutionPlan plan) {
-        // toolTraces 列表：TavilySearchTool.registerTrace 向其追加 ChatToolTrace。
-        // 复用 taskInfo 已有的可变容器；没有则即时新建，避免在 ChatTaskInfo 上加新字段。
-        List<Object> toolTraces = ensureToolTracesList(taskInfo);
-
         Map<String, Object> meta = new HashMap<>();
         meta.put(ChatContextKeys.STREAM_SINK, taskInfo.getSink());
         meta.put(ChatContextKeys.CONVERSATION_ID, taskInfo.getConversationId());
         meta.put(ChatContextKeys.TURN_ID, taskInfo.getTurnId());
-        meta.put(ChatContextKeys.TOOL_TRACES, toolTraces);
         meta.put(ChatContextKeys.USED_TOOLS, taskInfo.getUsedTools());
         meta.put(ChatContextKeys.QUESTION, pickQuestion(plan, taskInfo.getQuestion()));
         meta.put(ChatContextKeys.CURRENT_DATE, taskInfo.getCurrentDate());
@@ -207,15 +197,6 @@ public class ReactAgentExecutor implements ConversationExecutor {
                 .threadId(taskInfo.getConversationId());
         meta.forEach(builder::addMetadata);
         return builder.build();
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Object> ensureToolTracesList(ChatTaskInfo taskInfo) {
-        // toolTraces 暂存在 taskInfo.thinkingSteps? 否——thinkingSteps 是 List<String>。
-        // 这里临时挂到 references 列表（List<Object>），通过类型区分；或在 registry 直接挂新容器。
-        // 简化：每次新建一个 list 注入 metadata，由工具自行累积；executor 不消费它，
-        // 仅作为 TavilySearchTool.registerTrace 的写入载体。
-        return new ArrayList<>();
     }
 
     // ======================== trace / SSE 副作用 ========================

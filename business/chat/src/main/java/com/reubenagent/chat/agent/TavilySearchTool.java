@@ -4,8 +4,6 @@ import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
 import com.reubenagent.chat.config.ChatProperties;
-import com.reubenagent.chat.enums.ChatToolStatus;
-import com.reubenagent.chat.model.debug.ChatToolTrace;
 import com.reubenagent.chat.support.ChatContextKeys;
 import com.reubenagent.chat.support.ChatStreamEventWriter;
 import com.reubenagent.chat.support.ChatTexts;
@@ -30,7 +28,7 @@ import java.util.Map;
  * <ul>
  *   <li>不直接抛业务异常给 agent loop，所有失败包装为 {@link TavilySearchToolResult}（{@code success=false}），
  *       让 LLM 自己根据"工具失败"事实决策下一步；</li>
- *   <li>调用前 emit thinking 事件、调用后注册 {@link ChatToolTrace}、把工具名写进 {@code ToolContext.chat.used.tools}；</li>
+ *   <li>调用前 emit thinking 事件、调用后把工具名写进 {@code ToolContext.chat.used.tools}；</li>
  *   <li>结果摘要按 800 字符裁剪，避免 token 暴涨；</li>
  *   <li>API key 缺失时直接走"未配置 Tavily，无法联网"的失败结果，不发 HTTP。</li>
  * </ul></p>
@@ -210,20 +208,6 @@ public class TavilySearchTool {
             Object used = toolContext.getContext().get(ChatContextKeys.USED_TOOLS);
             if (used instanceof java.util.Set) {
                 ((java.util.Set<String>) used).add("tavily_search");
-            }
-            // 落 ChatToolTrace 到 taskInfo.thinkingSteps（暂存为 JSON 字符串）
-            Object traces = toolContext.getContext().get(ChatContextKeys.TOOL_TRACES);
-            if (traces instanceof java.util.List) {
-                ChatToolTrace trace = ChatToolTrace.builder()
-                        .toolName("tavily_search")
-                        .args(request == null ? "{}" : JSON.toJSONString(request))
-                        .result(result == null ? "{}" : JSON.toJSONString(result))
-                        .status(error != null || (result != null && !result.isSuccess())
-                                ? ChatToolStatus.FAILED : ChatToolStatus.SUCCESS)
-                        .durationMs(durationMs)
-                        .error(error == null ? null : error.getMessage())
-                        .build();
-                ((java.util.List<Object>) traces).add(trace);
             }
         }
         log.debug("Tavily 工具调用收尾 → query={} success={} duration={}ms",

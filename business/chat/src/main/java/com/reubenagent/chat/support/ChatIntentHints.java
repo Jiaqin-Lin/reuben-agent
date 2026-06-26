@@ -31,6 +31,11 @@ public final class ChatIntentHints {
             "说明", "规范", "条例"
     );
 
+    /** 结构定位关键词：命中时升级为 LOCATE_THEN_RETRIEVE（先定位章节再检索证据） */
+    public static final Set<String> STRUCTURE_KEYWORDS = Set.of(
+            "第几", "哪一节", "哪个章节", "目录", "结构", "在哪一", "章节"
+    );
+
     private ChatIntentHints() {
     }
 
@@ -48,5 +53,12 @@ public final class ChatIntentHints {
             return false;
         }
         return DOCUMENT_HINTS.stream().anyMatch(question::contains);
+    }
+
+    public static boolean matchesStructure(String question) {
+        if (question == null || question.isBlank()) {
+            return false;
+        }
+        return STRUCTURE_KEYWORDS.stream().anyMatch(question::contains);
     }
 }

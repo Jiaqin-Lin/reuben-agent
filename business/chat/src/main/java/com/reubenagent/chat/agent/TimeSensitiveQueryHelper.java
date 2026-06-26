@@ -1,7 +1,6 @@
 package com.reubenagent.chat.agent;
 
 import com.reubenagent.chat.config.ChatProperties;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
@@ -24,7 +23,6 @@ import java.util.List;
  * @author reuben
  * @since 2026-06-25
  */
-@Slf4j
 @Component
 public class TimeSensitiveQueryHelper {
 
