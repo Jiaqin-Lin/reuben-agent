@@ -26,6 +26,10 @@ public enum DocumentManageCode implements BaseEnum {
     PLAN_NOT_FOUND(20011, "策略方案不存在"),
     PLAN_STATUS_INVALID(20012, "策略方案状态不允许操作"),
     DOCUMENT_NOT_FOUND(20013, "文档不存在"),
+    DOCUMENT_HAS_ACTIVE_TASK(20014, "文档存在进行中的任务，无法删除"),
+    OPERATION_NOT_ALLOWED(20015, "当前状态不允许此操作"),
+    CHUNK_NOT_FOUND(20016, "切块不存在"),
+    TASK_NOT_FOUND(20017, "任务不存在"),
     ;
 
     @Getter

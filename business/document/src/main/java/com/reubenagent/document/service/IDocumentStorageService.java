@@ -9,4 +9,18 @@ public interface IDocumentStorageService {
     String uploadParsedText(Long documentId, String parsedText);
 
     byte[] downloadObject(String objectName);
+
+    /**
+     * 删除 MinIO 中的对象。
+     *
+     * @param objectName 对象存储路径
+     */
+    void deleteObject(String objectName);
+
+    /**
+     * 删除指定文档在 MinIO 中的所有数据（原文件 + 解析文本）。
+     *
+     * @param documentId 文档ID
+     */
+    void deleteByDocumentId(Long documentId);
 }

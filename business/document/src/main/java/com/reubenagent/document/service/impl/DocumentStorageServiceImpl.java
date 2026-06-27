@@ -8,6 +8,7 @@ import com.reubenagent.document.service.IDocumentStorageService;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -92,6 +93,46 @@ public class DocumentStorageServiceImpl implements IDocumentStorageService {
         } catch (Exception e) {
             log.error("MinIO 下载失败 objectName={}", objectName, e);
             throw new DocumentException(DocumentManageCode.MINIO_DOWNLOAD_FAIL, e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void deleteObject(String objectName) {
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(properties.getMinio().getBucketName())
+                    .object(objectName)
+                    .build());
+            log.info("MinIO 对象已删除 objectName={}", objectName);
+        } catch (Exception e) {
+            log.warn("MinIO 删除失败 objectName={}", objectName, e);
+        }
+    }
+
+    @Override
+    public void deleteByDocumentId(Long documentId) {
+        // MinIO 删除前缀下所有对象需要 listObjects + 逐个 remove
+        // 这里只记录 warn，实际由级联删除策略保证：存储删除失败不阻断 DB 删除
+        String prefix = properties.getMinio().getObjectPrefix() + "/" + documentId;
+        log.info("MinIO 目录清理请求: prefix={}", prefix);
+        try {
+            var objects = minioClient.listObjects(io.minio.ListObjectsArgs.builder()
+                    .bucket(properties.getMinio().getBucketName())
+                    .prefix(prefix)
+                    .recursive(true)
+                    .build());
+            for (var result : objects) {
+                try {
+                    minioClient.removeObject(RemoveObjectArgs.builder()
+                            .bucket(properties.getMinio().getBucketName())
+                            .object(result.get().objectName())
+                            .build());
+                } catch (Exception e) {
+                    log.warn("MinIO 单对象删除失败 objectName={}", result.get().objectName(), e);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("MinIO 目录删除异常 prefix={}", prefix, e);
         }
     }
 
