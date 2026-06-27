@@ -226,6 +226,20 @@ reuben:
     trace:
       persistenceEnabled: true
       benchmarkWindowSize: 100
+    lease:
+      ttlSeconds: 60
+    rewrite:
+      enabled: true
+      needsRewriteNoHistoryChars: 8
+      needsRewriteWithHistoryChars: 18
+      maxSubQuestions: 4
+      temperature: 0.2
+      topP: 0.8
+      thinkingEnabled: false
+    orchestration:
+      clarifyConfidenceThreshold: 0.45
+      clarifyTopScoreDiff: 0.001
+      routeCandidateTopK: 5
     pricing:
       perKTokenCost: {}
 

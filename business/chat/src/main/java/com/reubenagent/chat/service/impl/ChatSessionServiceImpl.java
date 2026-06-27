@@ -76,6 +76,7 @@ public class ChatSessionServiceImpl implements IChatSessionService {
                 : defaultTitle(mode, dto.getSelectedDocumentName());
 
         ConversationArchiveRecord record = ConversationArchiveRecord.builder()
+                .id(uidGenerator.getUid())
                 .conversationId(conversationId)
                 .sessionStatus(ChatSessionStatus.IDLE.getCode())
                 .chatMode(mode.getCode())

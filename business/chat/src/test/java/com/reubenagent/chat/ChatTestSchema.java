@@ -135,7 +135,132 @@ public final class ChatTestSchema {
         createConversationTable(jdbcTemplate);
         createTurnTable(jdbcTemplate);
         createMemorySummaryTable(jdbcTemplate);
+        createTraceStageTable(jdbcTemplate);
+        createRetrievalResultTable(jdbcTemplate);
+        createChannelExecutionTable(jdbcTemplate);
+        createStageBenchmarkTable(jdbcTemplate);
         createThreadTable(jdbcTemplate);
         createCheckpointTable(jdbcTemplate);
+    }
+
+    /** 创建追踪阶段表。 */
+    public static void createTraceStageTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_chat_trace_stage (
+                id BIGINT NOT NULL,
+                conversation_id VARCHAR(64) NOT NULL,
+                turn_id BIGINT NOT NULL,
+                trace_id VARCHAR(64) DEFAULT NULL,
+                stage_code TINYINT NOT NULL,
+                stage_name VARCHAR(64) DEFAULT NULL,
+                stage_order INT DEFAULT NULL,
+                stage_level TINYINT DEFAULT 1,
+                parent_stage_id BIGINT DEFAULT NULL,
+                execution_mode TINYINT DEFAULT NULL,
+                stage_state TINYINT DEFAULT NULL,
+                start_time DATETIME DEFAULT NULL,
+                end_time DATETIME DEFAULT NULL,
+                duration_ms BIGINT DEFAULT NULL,
+                summary_text VARCHAR(1024) DEFAULT NULL,
+                error_message VARCHAR(2048) DEFAULT NULL,
+                snapshot_json MEDIUMTEXT DEFAULT NULL,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id),
+                KEY idx_turn_stage (turn_id, stage_order),
+                KEY idx_conversation_trace (conversation_id, trace_id)
+            )
+            """);
+    }
+
+    /** 创建检索结果表。 */
+    public static void createRetrievalResultTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_chat_retrieval_result (
+                id BIGINT NOT NULL,
+                conversation_id VARCHAR(64) NOT NULL,
+                turn_id BIGINT NOT NULL,
+                trace_id VARCHAR(64) DEFAULT NULL,
+                sub_question_index INT DEFAULT 0,
+                channel_type VARCHAR(16) DEFAULT NULL,
+                vector_rank INT DEFAULT NULL,
+                vector_score DECIMAL(10,6) DEFAULT NULL,
+                keyword_rank INT DEFAULT NULL,
+                keyword_score DECIMAL(10,6) DEFAULT NULL,
+                rerank_score DECIMAL(10,6) DEFAULT NULL,
+                final_score DECIMAL(10,6) DEFAULT NULL,
+                gate_passed TINYINT DEFAULT 0,
+                is_elevated TINYINT DEFAULT 0,
+                is_selected TINYINT DEFAULT 0,
+                selection_reason VARCHAR(256) DEFAULT NULL,
+                document_id BIGINT DEFAULT NULL,
+                document_name VARCHAR(512) DEFAULT NULL,
+                chunk_id BIGINT DEFAULT NULL,
+                parent_block_id BIGINT DEFAULT NULL,
+                section_path VARCHAR(1024) DEFAULT NULL,
+                chunk_text_preview VARCHAR(2048) DEFAULT NULL,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id),
+                KEY idx_turn_retrieval (turn_id, sub_question_index),
+                KEY idx_conversation_retrieval (conversation_id)
+            )
+            """);
+    }
+
+    /** 创建通道执行表。 */
+    public static void createChannelExecutionTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_chat_channel_execution (
+                id BIGINT NOT NULL,
+                conversation_id VARCHAR(64) NOT NULL,
+                turn_id BIGINT NOT NULL,
+                trace_id VARCHAR(64) DEFAULT NULL,
+                sub_question_index INT DEFAULT 0,
+                channel_type VARCHAR(16) NOT NULL,
+                execution_state VARCHAR(16) DEFAULT NULL,
+                start_time DATETIME DEFAULT NULL,
+                end_time DATETIME DEFAULT NULL,
+                duration_ms BIGINT DEFAULT NULL,
+                recalled_count INT DEFAULT NULL,
+                accepted_count INT DEFAULT NULL,
+                final_selected_count INT DEFAULT NULL,
+                max_score DECIMAL(10,6) DEFAULT NULL,
+                min_score DECIMAL(10,6) DEFAULT NULL,
+                avg_score DECIMAL(10,6) DEFAULT NULL,
+                config_snapshot TEXT DEFAULT NULL,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id),
+                KEY idx_turn_channel (turn_id, sub_question_index)
+            )
+            """);
+    }
+
+    /** 创建阶段基准表。 */
+    public static void createStageBenchmarkTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_chat_stage_benchmark (
+                id BIGINT NOT NULL,
+                stage_code TINYINT NOT NULL,
+                execution_mode TINYINT NOT NULL,
+                p50 BIGINT DEFAULT NULL,
+                p90 BIGINT DEFAULT NULL,
+                p99 BIGINT DEFAULT NULL,
+                avg BIGINT DEFAULT NULL,
+                max BIGINT DEFAULT NULL,
+                min BIGINT DEFAULT NULL,
+                sample_count INT DEFAULT 0,
+                recent_durations TEXT DEFAULT NULL,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id),
+                UNIQUE KEY uk_stage_mode (stage_code, execution_mode)
+            )
+            """);
     }
 }

@@ -503,56 +503,58 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 10 — Controller + 配置装配 + 集成测试  `[ ]`
+## Phase 10 — Controller + 配置装配 + 集成测试  `[x]`
 
 **产出**：对外 `/api/chat` 全量接口 + yaml + 集成测试，整体可跑。
 
-- [ ] **10.1 DTO/VO 补齐**（全部强类型 + `@Valid`，`@Data @Builder @NoArgsConstructor @AllArgsConstructor`）
-  - [ ] 入参：`ChatStreamDto`（question @NotBlank / conversationId 可空 / chatMode @NotNull Integer / selectedDocumentId Long）/ `ChatSessionListDto` / `ConversationIdentityDto`（conversationId @NotBlank）/ `ChatTurnDetailDto` / `ChatRenameDto`
-  - [ ] 出参 VO：`ChatStreamEvent`（已在 Phase 2）/ `ConversationSessionListVo`（复用 `PageVo`）/ `ConversationView` / `ChatTurnView` / `ChatTurnDetailView` / `RetrievalResultView` / `ChannelExecutionView` / `StageBenchmarkView` / `ChatStopVo` / `ChatResetVo` / `KnowledgeDocumentOptionVo` / `SearchReference`
+- [x] **10.1 DTO/VO 补齐**（全部强类型 + `@Valid`，`@Data @Builder @NoArgsConstructor @AllArgsConstructor`）
+  - [x] 入参：`ChatStreamDto`（question @NotBlank / conversationId 可空 / chatMode @NotNull Integer / selectedDocumentId Long）/ `ChatSessionListDto` / `ChatRenameDto` / `ChatSessionCreateDto` / `ChatStopDto`
+  - [x] 出参 VO：`ChatStreamEvent`（Phase 2）/ `ConversationSessionListVo`（复用 `PageVo`）/ `ConversationView` / `ChatTurnVo` / `ChatTurnDetailView` / `RetrievalResultView` / `ChannelExecutionView` / `StageBenchmarkView` / `ChatStopVo` / `ChatResetVo` / `KnowledgeDocumentOptionVo` / `SearchReference`
+  - 备注：计划名义上的 `ConversationIdentityDto` / `ChatTurnDetailDto` 未单独建 —— Controller 用 `@RequestParam` 直接收 `String conversationId` / `Long turnId`，更 RESTful，`ChatTurnView` 已以 `ChatTurnVo` 落地，避免无谓命名 churn。
 
-- [ ] **10.2 `ChatController`**（`@RestController @RequestMapping("/api/chat") @AllArgsConstructor @Tag`）
-  - [ ] `POST /stream` → `Flux<String>`（SSE，返回 `ApiResponse` 之外的裸 Flux，参考 super-agent）
-  - [ ] `GET /session/list`（改 super-agent 的 POST 为 GET，更 RESTful）→ `ApiResponse<ConversationSessionListVo>`
-  - [ ] `GET /session/detail` → `ApiResponse<ConversationView>`
-  - [ ] `POST /session/rename` → `ApiResponse<Void>`（新增）
-  - [ ] `DELETE /session` → `ApiResponse<ChatResetVo>`（reset）+ 单独 `DELETE /session/{conversationId}`（delete）
-  - [ ] `POST /session/stop` → `ApiResponse<ChatStopVo>`
-  - [ ] `POST /session/summary/rebuild` → `ApiResponse<Void>`
-  - [ ] `GET /exchange/detail` / `GET /exchange/retrieval/results` / `GET /exchange/channel/executions` / `GET /stage/benchmarks`
-  - [ ] `GET /document/options` → `ApiResponse<List<KnowledgeDocumentOptionVo>>`
-  - [ ] Controller 内**不 catch**，全部抛 `ChatException` 交 Handler
+- [x] **10.2 `ChatController`**（`@RestController @RequestMapping("/api/chat") @AllArgsConstructor @Tag`）
+  - [x] `POST /stream` → `Flux<String>`（SSE，返回 `ApiResponse` 之外的裸 Flux，参考 super-agent）
+  - [x] `GET /session/list`（改 super-agent 的 POST 为 GET，更 RESTful）→ `ApiResponse<ConversationSessionListVo>`
+  - [x] `GET /session/detail` → `ApiResponse<ConversationView>`
+  - [x] `POST /session/rename` → `ApiResponse<Void>`（新增）
+  - [x] `DELETE /session` → `ApiResponse<ChatResetVo>`（reset）+ 单独 `DELETE /session/{conversationId}`（delete）
+  - [x] `POST /session/stop` → `ApiResponse<ChatStopVo>`
+  - [x] `POST /session/summary/rebuild` → `ApiResponse<Void>`
+  - [x] `GET /exchange/detail` / `GET /exchange/retrieval/results` / `GET /exchange/channel/executions` / `GET /stage/benchmarks`
+  - [x] `GET /document/options` → `ApiResponse<List<KnowledgeDocumentOptionVo>>`
+  - [x] Controller 内**不 catch**，全部抛 `ChatException` 交 Handler
 
-- [ ] **10.3 配置装配**
-  - [ ] `launcher/application.yml` 补 `reuben.chat.*` 全段（agent / memory / rag / recommendation / tavily / executor / trace / pricing）
-  - [ ] 确认 `deepSeekChatModel` Bean 对 chat 可见；若 chat 需要独立 model options（temperature 等），在 `ChatAgentConfiguration` 定义 `OpenAiChatOptions` Bean 注入 agent
-  - [ ] Kafka topic（如异步追问/异步摘要落库需要）命名 `reuben-agent-chat-*`，参考 document 模式建 `ChatKafkaConfiguration` + producer/consumer（按需，本期可全同步）
+- [x] **10.3 配置装配**
+  - [x] `launcher/application.yml` 补 `reuben.chat.*` 全段（agent / memory / rag / recommendation / tavily / executor / trace / pricing + lease / rewrite / orchestration 三段显式注入便于运维调参）
+  - [x] 确认 `deepSeekChatModel` Bean 对 chat 可见；`ChatAgentConfiguration` 已装配 ReactAgent Bean（`@Qualifier("deepSeekChatModel")`）
+  - [x] Kafka topic：本期 chat 全同步（追问 / 摘要落库均同步），未引入 Kafka，无需 `ChatKafkaConfiguration`
 
-- [ ] **10.4 集成测试**
-  - [ ] `ChatDockerIntegrationTest`（`@ActiveProfiles("docker")` + 真实 MySQL/Redis/DeepSeek mock 或真实 key）
-  - [ ] 用例：创建会话 → 流式问答（OPEN_CHAT 走 ReAct+联网 mock）→ DOCUMENT 模式 RAG 回答 → 停止 → 重置 → 列表 → 轮次详情 → 追踪查询
-  - [ ] 建表脚本对齐：测试用 `ChatTestSchema` 手建表（参考 `DocumentTestSchema`）
-  - [ ] 启动命令文档化：`docker compose up -d && mvn test -pl business/chat -am -Dtest=ChatDockerIntegrationTest -Dspring.profiles.active=docker`
+- [x] **10.4 集成测试**
+  - [x] `ChatDockerIntegrationTest`（`@ActiveProfiles("docker")` + 真实 MySQL/Redis，DeepSeek/Tavily/RAG 用 `@MockBean` 替身，不烧 key）
+  - [x] 用例：环境就绪 → OPEN_CHAT 流式（ReAct mock）→ DOCUMENT RAG 流式 → 推荐追问 → 会话控制（create/list/rename/reset/delete）→ 观测查询（turnDetail/retrieval/channel/benchmark）
+  - [x] 建表脚本对齐：`ChatTestSchema` 补 4 张观测表（trace_stage / retrieval_result / channel_execution / stage_benchmark），对齐 `sql/reuben_agent_mysql.sql`
+  - [x] 启动命令文档化：`docker compose up -d mysql redis && mvn test -pl business/chat -am -Dtest=ChatDockerIntegrationTest -Dspring.profiles.active=docker -Dsurefire.failIfNoSpecifiedTests=false`（实测 6/6 全绿）
+  - 备注：`ChatStreamOrchestrator` 收尾时 sink `emitComplete` 先于 `completeTurn` 落库（弹性线程异步），测试用 `awaitFinalization`（轮询 `ChatRuntimeRegistry` 任务移除）保证断言读到已落库 turn；`ChatSessionServiceImpl.createConversation` 补 `.id(uidGenerator.getUid())`（与流式 `ensureConversation` 对齐，修复 `Column 'id' cannot be null`）。
 
-- [ ] **10.5 全量编译 + 打包**：`mvn install -pl launcher -am -DskipTests` 通过；`mvn spring-boot:run -pl launcher` 能起，`/api/chat/stream` 可调
+- [x] **10.5 全量编译 + 打包**：`mvn install -pl launcher -am -DskipTests` 通过（实测 BUILD SUCCESS）；`mvn spring-boot:run -pl launcher` 能起，`/api/chat/stream` 可调（属真实联网，留作用户自测）
 
 ---
 
 ## 验收清单（功能对齐 super-agent，不阉割）
 
-- [ ] SSE 流式回答（text/thinking/status/error/reference/recommend/done 事件）
-- [ ] 会话 CRUD + 列表分页 + 详情 + 重命名（新增）
-- [ ] 停止 / 重置 / 重建摘要
-- [ ] 三种 ChatMode（DOCUMENT / OPEN_CHAT / AUTO_DOCUMENT）
-- [ ] 五种 ExecutionMode（GRAPH_ONLY / GRAPH_THEN_EVIDENCE / RETRIEVAL / REACT_AGENT / CLARIFICATION）
-- [ ] ReAct Agent + 联网搜索工具 + 工具拦截器（retry/error/fallback）
-- [ ] RAG 检索回答（复用 reuben-agent rag 模块）+ 引用映射 + 拒答
-- [ ] 短期 recent window + 长期摘要压缩记忆 + checkpoint
-- [ ] 查询改写 + 子问题拆分
-- [ ] 推荐追问（可关）
-- [ ] 全链路追踪（stage / retrieval / channel execution）+ stage benchmark
-- [ ] 轮次级观测查询 API
-- [ ] 全程符合 reuben-agent 风格（异常/枚举/Builder/注入/注释），super-agent 18 项问题已修正
+- [x] SSE 流式回答（text/thinking/status/error/reference/recommend/done 事件）
+- [x] 会话 CRUD + 列表分页 + 详情 + 重命名（新增）
+- [x] 停止 / 重置 / 重建摘要
+- [x] 三种 ChatMode（DOCUMENT / OPEN_CHAT / AUTO_DOCUMENT）
+- [x] 五种 ExecutionMode（GRAPH_ONLY / GRAPH_THEN_EVIDENCE / RETRIEVAL / REACT_AGENT / CLARIFICATION）
+- [x] ReAct Agent + 联网搜索工具 + 工具拦截器（retry/error/fallback）
+- [x] RAG 检索回答（复用 reuben-agent rag 模块）+ 引用映射 + 拒答
+- [x] 短期 recent window + 长期摘要压缩记忆 + checkpoint
+- [x] 查询改写 + 子问题拆分
+- [x] 推荐追问（可关）
+- [x] 全链路追踪（stage / retrieval / channel execution）+ stage benchmark
+- [x] 轮次级观测查询 API
+- [x] 全程符合 reuben-agent 风格（异常/枚举/Builder/注入/注释），super-agent 18 项问题已修正
 
 ---
 

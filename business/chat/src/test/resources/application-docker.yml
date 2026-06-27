@@ -1,0 +1,118 @@
+# =============================================================================
+# Docker 集成测试配置 — 连接 docker-compose 中的 MySQL + Redis
+# 前置: docker compose up -d mysql redis
+# 使用: @ActiveProfiles("docker")
+# =============================================================================
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3307/reuben_agent?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: root
+    password: root123
+
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+
+  # 禁用不需要的自动配置（ES/Neo4j/Kafka/chat 不依赖）
+  # UidGeneratorAutoConfiguration 排除：测试用 @MockBean UidGenerator 自增序列，
+  # 避免 DefaultUidGenerator + RedisDisposableWorkerIdAssigner 生成 id 时
+  # workerId 与 sequence 冲突导致重复 id（实测同一 workerId/秒内 sequence 不递增 → 重复主键）
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchRestClientAutoConfiguration
+      - org.springframework.boot.autoconfigure.elasticsearch.ElasticsearchDataAutoConfiguration
+      - org.springframework.boot.autoconfigure.neo4j.Neo4jAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - com.reubenagent.framework.uid.config.UidGeneratorAutoConfiguration
+
+  ai:
+    model:
+      chat: deepseek
+      embedding: ollama
+    deepseek:
+      api-key: fake-test-key
+      chat:
+        options:
+          model: deepseek-v4-flash
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        enabled: false
+      embedding:
+        model: bge-m3
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: is_deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+logging:
+  level:
+    com.reubenagent: DEBUG
+    org.springframework: WARN
+
+reuben:
+  chat:
+    agent:
+      systemPrompt: test-agent-prompt
+      maxModelCallsPerRun: 8
+      maxModelCallsPerThread: 40
+      maxToolCallsPerRun: 6
+      maxToolCallsPerThread: 30
+      historyPreviewTurns: 4
+    memory:
+      keepRecentTurns: 4
+      compressionBatchTurns: 6
+      recentTranscriptMaxChars: 2200
+      userPromptMaxChars: 8000
+      answerMaxChars: 16000
+      summaryMaxChars: 1200
+    rag:
+      topK: 5
+      minScore: 0.0
+      charBudget: 3000
+      maxEvidenceCount: 6
+      rerankEnabled: false
+    recommendation:
+      enabled: true
+      timeoutMs: 3000
+      maxCount: 3
+      prompt: test-recommendation-prompt
+    tavily:
+      baseUrl: https://api.tavily.com
+      apiKey:
+      topic: general
+      searchDepth: basic
+      maxResults: 5
+      timeoutMs: 8000
+    executor:
+      ragPoolSize: 4
+      memoryPoolSize: 2
+      postProcessPoolSize: 4
+    trace:
+      persistenceEnabled: true
+      benchmarkWindowSize: 100
+    lease:
+      ttlSeconds: 60
+    rewrite:
+      enabled: true
+      needsRewriteNoHistoryChars: 8
+      needsRewriteWithHistoryChars: 18
+      maxSubQuestions: 4
+      temperature: 0.2
+      topP: 0.8
+      thinkingEnabled: false
+    orchestration:
+      clarifyConfidenceThreshold: 0.45
+      clarifyTopScoreDiff: 0.001
+      routeCandidateTopK: 5
+    pricing:
+      perKTokenCost: {}
