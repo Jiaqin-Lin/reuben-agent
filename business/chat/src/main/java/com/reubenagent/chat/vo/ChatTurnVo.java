@@ -33,6 +33,21 @@ public class ChatTurnVo {
     @Schema(description = "回答内容")
     private String replyContent;
 
+    @Schema(description = "引用快照JSON")
+    private String sourceSnapshotList;
+
+    @Schema(description = "追问建议JSON")
+    private String followupSuggestionList;
+
+    @Schema(description = "工具调用追踪JSON")
+    private String toolTraceList;
+
+    @Schema(description = "调试追踪JSON")
+    private String debugTraceJson;
+
+    @Schema(description = "收尾说明")
+    private String finishNote;
+
     @Schema(description = "轮次状态：1=执行中 2=完成 3=失败 4=停止")
     private Integer turnStatus;
 

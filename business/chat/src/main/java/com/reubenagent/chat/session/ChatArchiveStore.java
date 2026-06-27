@@ -28,6 +28,13 @@ public interface ChatArchiveStore {
     /** 软删会话（连带关联轮次）。 */
     ConversationRemovalResult deleteConversation(String conversationId);
 
+    /**
+     * 重置会话 —— 只删关联轮次，保留会话本身（置回 IDLE）。
+     *
+     * @return 删除的轮次数
+     */
+    int deleteTurnsByConversation(String conversationId);
+
     /** 创建一轮（RUNNING），返回 turnId。 */
     Long startTurn(TurnArchiveRecord record);
 

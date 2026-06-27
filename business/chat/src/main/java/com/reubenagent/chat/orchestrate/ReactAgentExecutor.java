@@ -214,6 +214,11 @@ public class ReactAgentExecutor implements ConversationExecutor {
         meta.put(ChatContextKeys.QUESTION, pickQuestion(plan, taskInfo.getQuestion()));
         meta.put(ChatContextKeys.CURRENT_DATE, taskInfo.getCurrentDate());
         meta.put(ChatContextKeys.CURRENT_DATE_TEXT, taskInfo.getCurrentDateText());
+        // 阶段：注入 per-turn model-usage trace sink，供 ModelUsageTraceInterceptor 落 token/成本
+        ChatTraceRecorder recorder = taskInfo.getTraceRecorder();
+        if (recorder != null) {
+            meta.put(ChatContextKeys.MODEL_USAGE_TRACE_SINK, recorder.traceSink());
+        }
 
         RunnableConfig.Builder builder = RunnableConfig.builder()
                 .threadId(taskInfo.getConversationId());

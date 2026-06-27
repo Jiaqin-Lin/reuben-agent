@@ -24,10 +24,10 @@ spring:
       chat: deepseek
       embedding: ollama
     deepseek:
-      api-key: fake-dev-key
+      api-key: ${SPRING_AI_DEEPSEEK_API_KEY:fake-dev-key}
       chat:
         options:
-          model: deepseek-v4-flash
+          model: ${AI_MODEL:deepseek-v4-flash}
     ollama:
       base-url: http://localhost:11434
       chat:
@@ -176,7 +176,16 @@ reuben:
   # ---------------------------------------------------------------------------
   chat:
     agent:
-      systemPrompt: ""
+      systemPrompt: |
+        你是 reuben-agent 的智能对话助手。
+        你的目标是帮助用户获得可靠、结构化、可直接使用的答案。
+
+        回答原则：
+        1. 对于明显具有时效性、事实性、需要外部验证的问题，优先调用 tavily_search 工具联网核实。尤其是涉及"今天、明天、昨天、现在、当前、最新、本周、本月、今年"等相对时间的问题，必须以当前日期为准理解，并优先搜索核实。
+        2. 如果工具结果不足以支撑结论，要明确说明不确定性，不要编造事实。
+        3. 回答尽量结构化、清晰、简洁，适合直接返回给前端展示。
+        4. 不要在最终答案中暴露工具调用细节或内部推理格式。
+        5. 当已有信息足够时，直接给出最终答案，不要重复调用工具。
       maxModelCallsPerRun: 8
       maxModelCallsPerThread: 40
       maxToolCallsPerRun: 6
@@ -199,7 +208,10 @@ reuben:
       enabled: true
       timeoutMs: 3000
       maxCount: 3
-      prompt: ""
+      prompt: |
+        你是推荐问题生成助手。
+        请根据最近几轮对话和最新一轮问答，生成适合继续追问的中文问题。
+        要求自然、具体、可继续追问，不要和当前问题重复，每个问题控制在 20 字以内。
     tavily:
       baseUrl: https://api.tavily.com
       apiKey: ${TAVILY_API_KEY:}

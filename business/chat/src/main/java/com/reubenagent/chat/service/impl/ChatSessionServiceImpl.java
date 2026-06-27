@@ -17,9 +17,17 @@ import com.reubenagent.chat.session.ConversationRemovalResult;
 import com.reubenagent.chat.session.TurnArchiveRecord;
 import com.reubenagent.chat.service.IChatMemoryService;
 import com.reubenagent.chat.service.IChatSessionService;
+import com.reubenagent.chat.trace.ChatStageBenchmarkService;
+import com.reubenagent.chat.trace.ChatTraceStageStore;
+import com.reubenagent.chat.vo.ChannelExecutionView;
+import com.reubenagent.chat.vo.ChatResetVo;
+import com.reubenagent.chat.vo.ChatTraceStageView;
+import com.reubenagent.chat.vo.ChatTurnDetailView;
+import com.reubenagent.chat.vo.ChatTurnVo;
 import com.reubenagent.chat.vo.ConversationSessionListVo;
 import com.reubenagent.chat.vo.ConversationView;
-import com.reubenagent.chat.vo.ChatTurnVo;
+import com.reubenagent.chat.vo.RetrievalResultView;
+import com.reubenagent.chat.vo.StageBenchmarkView;
 import com.reubenagent.common.dto.PageVo;
 import com.reubenagent.framework.uid.UidGenerator;
 import lombok.AllArgsConstructor;
@@ -30,7 +38,6 @@ import org.springframework.stereotype.Service;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
-
 /**
  * 会话业务编排实现。
  *
@@ -48,6 +55,10 @@ public class ChatSessionServiceImpl implements IChatSessionService {
     private final UidGenerator uidGenerator;
     private final ObjectProvider<ChatCheckpointManager> checkpointManagerProvider;
     private final ObjectProvider<IChatMemoryService> memoryServiceProvider;
+    private final ChatTraceStageStore traceStageStore;
+    private final ChatStageBenchmarkService benchmarkService;
+    private final com.reubenagent.chat.mapper.IChatRetrievalResultMapper retrievalResultMapper;
+    private final com.reubenagent.chat.mapper.IChatChannelExecutionMapper channelExecutionMapper;
 
     @Override
     public ConversationView createConversation(ChatSessionCreateDto dto) {
@@ -108,10 +119,20 @@ public class ChatSessionServiceImpl implements IChatSessionService {
     @Override
     public void deleteConversation(String conversationId) {
         ConversationRemovalResult result = archiveStore.deleteConversation(conversationId);
-        // 阶段：级联清理 ReAct 检查点 + 长期摘要
+        // 阶段：级联清理 ReAct 检查点 + 长期摘要 + 追踪 stage
         cascadeClearMemory(conversationId);
+        safeDeleteTraceStages(conversationId);
         log.info("删除会话 → conversationId={} removed={} turns={}",
                 conversationId, result.isConversationRemoved(), result.getRemovedTurnCount());
+    }
+
+    /** 删除会话的追踪 stage（失败 warn 不阻断删除主流程）。 */
+    private void safeDeleteTraceStages(String conversationId) {
+        try {
+            traceStageStore.deleteByConversation(conversationId);
+        } catch (Exception e) {
+            log.warn("清理会话追踪 stage 失败 → conversationId={} err={}", conversationId, e.getMessage());
+        }
     }
 
     /** 删除会话后级联清理 checkpoint + memory summary（可选 Bean，缺失跳过）。 */
@@ -162,6 +183,205 @@ public class ChatSessionServiceImpl implements IChatSessionService {
         }
         String trimmed = firstQuestion.trim().replaceAll("\\s+", " ");
         return trimmed.length() <= 32 ? trimmed : trimmed.substring(0, 32) + "…";
+    }
+
+    @Override
+    public ChatResetVo resetConversation(String conversationId) {
+        requireConversation(conversationId);
+        int removedTurns = archiveStore.deleteTurnsByConversation(conversationId);
+        int removedCheckpoints = clearCheckpoint(conversationId);
+        boolean summaryCleared = deleteSummary(conversationId);
+        safeDeleteTraceStages(conversationId);
+        log.info("重置会话 → conversationId={} turns={} checkpoints={} summaryCleared={}",
+                conversationId, removedTurns, removedCheckpoints, summaryCleared);
+        return ChatResetVo.builder()
+                .conversationId(conversationId)
+                .removedTurnCount(removedTurns)
+                .removedCheckpointCount(removedCheckpoints)
+                .summaryCleared(summaryCleared)
+                .message("会话已重置")
+                .build();
+    }
+
+    @Override
+    public void rebuildSummary(String conversationId) {
+        requireConversation(conversationId);
+        IChatMemoryService memoryService = memoryServiceProvider.getIfAvailable();
+        if (memoryService == null) {
+            log.warn("记忆服务不可用，无法重建摘要 → conversationId={}", conversationId);
+            return;
+        }
+        memoryService.rebuildConversationSummary(conversationId);
+        log.info("重建会话长期摘要 → conversationId={}", conversationId);
+    }
+
+    /** 清理会话检查点，返回清理数量（可选 Bean 缺失返回 0）。 */
+    private int clearCheckpoint(String conversationId) {
+        ChatCheckpointManager checkpointManager = checkpointManagerProvider.getIfAvailable();
+        if (checkpointManager == null) {
+            return 0;
+        }
+        try {
+            return checkpointManager.clearThread(conversationId);
+        } catch (Exception e) {
+            log.warn("清理会话检查点失败 → conversationId={} err={}", conversationId, e.getMessage());
+            return 0;
+        }
+    }
+
+    /** 删除会话长期摘要，返回是否删除（可选 Bean 缺失 / 无摘要返回 false）。 */
+    private boolean deleteSummary(String conversationId) {
+        IChatMemoryService memoryService = memoryServiceProvider.getIfAvailable();
+        if (memoryService == null) {
+            return false;
+        }
+        try {
+            memoryService.deleteConversationSummary(conversationId);
+            return true;
+        } catch (Exception e) {
+            log.warn("清理会话长期摘要失败 → conversationId={} err={}", conversationId, e.getMessage());
+            return false;
+        }
+    }
+
+    // ======================== 观测查询（Phase 9.3）========================
+
+    @Override
+    public ChatTurnDetailView getTurnDetail(String conversationId, Long turnId) {
+        requireConversation(conversationId);
+        TurnArchiveRecord turn = requireTurn(conversationId, turnId);
+        List<ChatTraceStageView> stages = traceStageStore.listStages(turnId).stream()
+                .map(this::toStageView)
+                .toList();
+        return ChatTurnDetailView.builder()
+                .turn(toTurnVo(turn))
+                .stageTraces(stages)
+                .build();
+    }
+
+    @Override
+    public List<RetrievalResultView> getRetrievalResults(String conversationId, Long turnId) {
+        requireConversation(conversationId);
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.reubenagent.chat.entity.ChatRetrievalResult> wrapper =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.reubenagent.chat.entity.ChatRetrievalResult>()
+                        .eq(com.reubenagent.chat.entity.ChatRetrievalResult::getTurnId, turnId)
+                        .orderByAsc(com.reubenagent.chat.entity.ChatRetrievalResult::getSubQuestionIndex)
+                        .orderByAsc(com.reubenagent.chat.entity.ChatRetrievalResult::getVectorRank);
+        return retrievalResultMapper.selectList(wrapper).stream()
+                .map(this::toRetrievalView)
+                .toList();
+    }
+
+    @Override
+    public List<ChannelExecutionView> getChannelExecutions(String conversationId, Long turnId) {
+        requireConversation(conversationId);
+        com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.reubenagent.chat.entity.ChatChannelExecution> wrapper =
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<com.reubenagent.chat.entity.ChatChannelExecution>()
+                        .eq(com.reubenagent.chat.entity.ChatChannelExecution::getTurnId, turnId)
+                        .orderByAsc(com.reubenagent.chat.entity.ChatChannelExecution::getSubQuestionIndex);
+        return channelExecutionMapper.selectList(wrapper).stream()
+                .map(this::toChannelView)
+                .toList();
+    }
+
+    @Override
+    public List<StageBenchmarkView> getStageBenchmarks(Integer executionMode) {
+        com.reubenagent.chat.enums.ExecutionMode mode = executionMode == null
+                ? null : com.reubenagent.chat.enums.ExecutionMode.getFromCode(executionMode);
+        if (mode != null) {
+            return benchmarkService.listAll().stream()
+                    .filter(b -> Objects.equals(b.getExecutionMode(), mode.getCode()))
+                    .map(this::toBenchmarkView)
+                    .toList();
+        }
+        return benchmarkService.listAll().stream()
+                .map(this::toBenchmarkView)
+                .toList();
+    }
+
+    private TurnArchiveRecord requireTurn(String conversationId, Long turnId) {
+        if (turnId == null) {
+            throw new ChatException(ChatErrorCode.PARAM_INVALID, "turnId 不能为空");
+        }
+        List<TurnArchiveRecord> turns = archiveStore.listRecentTurns(conversationId, Integer.MAX_VALUE);
+        return turns.stream()
+                .filter(t -> turnId.equals(t.getId()))
+                .findFirst()
+                .orElseThrow(() -> new ChatException(ChatErrorCode.TURN_NOT_FOUND, String.valueOf(turnId)));
+    }
+
+    private ChatTraceStageView toStageView(com.reubenagent.chat.entity.ChatTraceStage s) {
+        return ChatTraceStageView.builder()
+                .id(s.getId())
+                .conversationId(s.getConversationId())
+                .turnId(s.getTurnId())
+                .traceId(s.getTraceId())
+                .stageCode(s.getStageCode())
+                .stageName(s.getStageName())
+                .stageOrder(s.getStageOrder())
+                .executionMode(s.getExecutionMode())
+                .stageState(s.getStageState())
+                .startTime(s.getStartTime())
+                .endTime(s.getEndTime())
+                .durationMs(s.getDurationMs())
+                .summaryText(s.getSummaryText())
+                .errorMessage(s.getErrorMessage())
+                .build();
+    }
+
+    private RetrievalResultView toRetrievalView(com.reubenagent.chat.entity.ChatRetrievalResult r) {
+        return RetrievalResultView.builder()
+                .id(r.getId())
+                .conversationId(r.getConversationId())
+                .turnId(r.getTurnId())
+                .subQuestionIndex(r.getSubQuestionIndex())
+                .channelType(r.getChannelType())
+                .vectorRank(r.getVectorRank())
+                .rerankScore(r.getRerankScore())
+                .finalScore(r.getFinalScore())
+                .gatePassed(r.getGatePassed())
+                .isSelected(r.getIsSelected())
+                .documentId(r.getDocumentId())
+                .documentName(r.getDocumentName())
+                .chunkId(r.getChunkId())
+                .sectionPath(r.getSectionPath())
+                .chunkTextPreview(r.getChunkTextPreview())
+                .createTime(r.getCreateTime())
+                .build();
+    }
+
+    private ChannelExecutionView toChannelView(com.reubenagent.chat.entity.ChatChannelExecution c) {
+        return ChannelExecutionView.builder()
+                .id(c.getId())
+                .conversationId(c.getConversationId())
+                .turnId(c.getTurnId())
+                .subQuestionIndex(c.getSubQuestionIndex())
+                .channelType(c.getChannelType())
+                .executionState(c.getExecutionState())
+                .startTime(c.getStartTime())
+                .endTime(c.getEndTime())
+                .durationMs(c.getDurationMs())
+                .recalledCount(c.getRecalledCount())
+                .acceptedCount(c.getAcceptedCount())
+                .finalSelectedCount(c.getFinalSelectedCount())
+                .maxScore(c.getMaxScore())
+                .minScore(c.getMinScore())
+                .build();
+    }
+
+    private StageBenchmarkView toBenchmarkView(com.reubenagent.chat.entity.ChatStageBenchmark b) {
+        return StageBenchmarkView.builder()
+                .stageCode(b.getStageCode())
+                .executionMode(b.getExecutionMode())
+                .p50(b.getP50())
+                .p90(b.getP90())
+                .p99(b.getP99())
+                .avg(b.getAvg())
+                .max(b.getMax())
+                .min(b.getMin())
+                .sampleCount(b.getSampleCount())
+                .recentDurations(b.getRecentDurations())
+                .build();
     }
 
     // ======================== 内部 ========================
@@ -219,6 +439,11 @@ public class ChatSessionServiceImpl implements IChatSessionService {
                 .conversationId(turn.getConversationId())
                 .userPrompt(turn.getUserPrompt())
                 .replyContent(turn.getReplyContent())
+                .sourceSnapshotList(turn.getSourceSnapshotList())
+                .followupSuggestionList(turn.getFollowupSuggestionList())
+                .toolTraceList(turn.getToolTraceList())
+                .debugTraceJson(turn.getDebugTraceJson())
+                .finishNote(turn.getFinishNote())
                 .turnStatus(turn.getTurnStatus())
                 .executionMode(turn.getExecutionMode())
                 .firstTokenLatencyMs(turn.getFirstTokenLatencyMs())

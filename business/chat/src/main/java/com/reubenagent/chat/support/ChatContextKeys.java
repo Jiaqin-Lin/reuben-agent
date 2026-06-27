@@ -30,6 +30,9 @@ public final class ChatContextKeys {
     /** Tavily 工具用：当前 turnId（注入到 ToolContext） */
     public static final String TURN_ID = "chat.turn.id";
 
+    /** ReAct Agent model-usage 追踪 sink：Consumer<ChatModelUsageTrace>，由 ModelUsageTraceInterceptor 写入 */
+    public static final String MODEL_USAGE_TRACE_SINK = "chat.model.usage.trace.sink";
+
     private ChatContextKeys() {
     }
 }

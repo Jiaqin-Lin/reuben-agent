@@ -67,6 +67,7 @@ public class ChatStreamOrchestrator {
     private final ChatStageBenchmarkService benchmarkService;
     private final ChatPreparationOrchestrator preparationOrchestrator;
     private final com.reubenagent.chat.support.ChatJsonCodec jsonCodec;
+    private final com.reubenagent.chat.service.IChatRecommendationService recommendationService;
 
     /**
      * 开启流式回答主流程。
@@ -299,10 +300,25 @@ public class ChatStreamOrchestrator {
         ChatTraceRecorder.StageHandle finalizeStage = recorder == null ? null
                 : recorder.startStage(ChatTraceStageCode.FINALIZE, finalizeExecMode, "收尾落库", null);
 
-        // 阶段 1：emit 终止事件
+        // 阶段 1：emit 终止事件（先 emit done + complete，前端尽快收到结束信号；
+        // 推荐追问在落库前生成，作为最后一个事件在 done 之前 emit）
         try {
             if (status == ChatTurnStatus.FAILED && errorMessage != null) {
                 emit(taskInfo, eventWriter.error(errorMessage, taskInfo.getConversationId(), taskInfo.getTurnId()));
+            }
+            // 阶段：推荐追问（仅 COMPLETED 且答案非空时生成；失败/停止跳过）
+            if (status == ChatTurnStatus.COMPLETED) {
+                List<String> recommendations = generateRecommendations(taskInfo);
+                if (!recommendations.isEmpty()) {
+                    try {
+                        emit(taskInfo, eventWriter.recommendations(recommendations,
+                                taskInfo.getConversationId(), taskInfo.getTurnId()));
+                    } catch (Exception e) {
+                        log.warn("推荐追问事件 emit 失败 → conversationId={} err={}",
+                                taskInfo.getConversationId(), e.getMessage());
+                    }
+                    taskInfo.setFollowupSuggestions(recommendations);
+                }
             }
             emit(taskInfo, eventWriter.done(taskInfo.getConversationId(), taskInfo.getTurnId()));
             SinkEmitHelper.emitComplete(taskInfo.getSink());
@@ -321,6 +337,7 @@ public class ChatStreamOrchestrator {
                     .finishNote(status == ChatTurnStatus.FAILED ? errorMessage : "")
                     .sourceSnapshotList(jsonCodec.toJson(taskInfo.getReferences()))
                     .toolTraceList(jsonCodec.toJson(taskInfo.getThinkingSteps()))
+                    .followupSuggestionList(jsonCodec.toListJson(taskInfo.getFollowupSuggestions()))
                     .debugTraceJson(buildDebugTraceJson(taskInfo.getTraceRecorder()))
                     .firstTokenLatencyMs(toNullable(taskInfo.getFirstTokenLatencyMs().get()))
                     .totalLatencyMs(totalLatency)
@@ -475,6 +492,28 @@ public class ChatStreamOrchestrator {
                 .modelUsageTraces(traces)
                 .build();
         return jsonCodec.toJson(debug);
+    }
+
+    /** 生成推荐追问：把 taskInfo.references 转成 SearchReference 列表交给 recommendationService。 */
+    @SuppressWarnings("unchecked")
+    private List<String> generateRecommendations(ChatTaskInfo taskInfo) {
+        String answer = taskInfo.getAnswerBuffer().toString();
+        if (answer.isBlank()) {
+            return Collections.emptyList();
+        }
+        List<com.reubenagent.chat.model.SearchReference> refs = new java.util.ArrayList<>();
+        for (Object ref : taskInfo.getReferences()) {
+            if (ref instanceof com.reubenagent.chat.model.SearchReference sr) {
+                refs.add(sr);
+            }
+        }
+        try {
+            return recommendationService.recommend(taskInfo.getQuestion(), answer, refs, taskInfo.getTraceRecorder());
+        } catch (Exception e) {
+            log.warn("推荐追问生成失败（不阻塞收尾） → conversationId={} err={}",
+                    taskInfo.getConversationId(), e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     private Flux<String> errorFlux(String message, String conversationId) {

@@ -1,7 +1,10 @@
 package com.reubenagent.chat.trace;
 
+import com.reubenagent.chat.entity.ChatTraceStage;
 import com.reubenagent.chat.enums.ChatTraceStageCode;
 import com.reubenagent.chat.enums.ChatTraceStageState;
+
+import java.util.List;
 
 /**
  * 全链路追踪 stage 持久化仓储。
@@ -22,4 +25,14 @@ public interface ChatTraceStageStore {
     /** 收尾 stage（成功/失败/跳过统一入口）。 */
     void finishStage(long stageId, ChatTraceStageState state, String summaryText,
                      String errorMessage, Object snapshot, long durationMs);
+
+    /** 列出某轮的全部 stage（按 stage_order 升序），Phase 9 观测查询依赖。 */
+    default List<ChatTraceStage> listStages(Long turnId) {
+        return List.of();
+    }
+
+    /** 按 conversationId 删除全部 stage（重置/删除会话时调用），Phase 9。 */
+    default int deleteByConversation(String conversationId) {
+        return 0;
+    }
 }

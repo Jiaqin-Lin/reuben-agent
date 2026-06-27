@@ -122,6 +122,29 @@ public class ChatArchiveStoreImpl implements ChatArchiveStore {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class, propagation = Propagation.REQUIRED)
+    public int deleteTurnsByConversation(String conversationId) {
+        if (conversationId == null) {
+            return 0;
+        }
+        LambdaUpdateWrapper<ChatTurn> turnRemove = new LambdaUpdateWrapper<ChatTurn>()
+                .eq(ChatTurn::getConversationId, conversationId);
+        int removedTurns = turnMapper.delete(turnRemove);
+
+        // 会话置回 IDLE
+        ChatConversation existing = selectByConversationId(conversationId);
+        if (existing != null) {
+            ChatConversation patch = ChatConversation.builder()
+                    .id(existing.getId())
+                    .sessionStatus(com.reubenagent.chat.enums.ChatSessionStatus.IDLE.getCode())
+                    .build();
+            conversationMapper.updateById(patch);
+        }
+        log.info("重置会话轮次 → conversationId={} turns={}", conversationId, removedTurns);
+        return removedTurns;
+    }
+
+    @Override
     public Long startTurn(TurnArchiveRecord record) {
         ChatTurn entity = toTurnEntity(record);
         turnMapper.insert(entity);

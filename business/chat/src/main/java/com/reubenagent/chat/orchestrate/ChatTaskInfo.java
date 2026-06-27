@@ -54,6 +54,10 @@ public class ChatTaskInfo {
     @Getter
     private final StringBuffer answerBuffer = new StringBuffer();
 
+    /** 本轮生成的推荐追问（finalize 时由 recommendationService 填充，落 turn.followup_suggestion_list） */
+    @Getter
+    private volatile List<String> followupSuggestions = java.util.Collections.emptyList();
+
     /** 系统思考步骤（推送给前端的状态） */
     private final List<String> thinkingSteps;
     /** 引文来源 */
@@ -91,6 +95,11 @@ public class ChatTaskInfo {
     /** 写入执行计划（仅 prepare 阶段调用一次）。 */
     public void setExecutionPlan(ConversationExecutionPlan plan) {
         this.executionPlan = plan;
+    }
+
+    /** 写入推荐追问（仅 finalize 阶段调用一次）。 */
+    public void setFollowupSuggestions(List<String> suggestions) {
+        this.followupSuggestions = suggestions == null ? java.util.Collections.emptyList() : suggestions;
     }
 
     /** 标记是否已收尾。 */

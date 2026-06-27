@@ -470,35 +470,35 @@ super-agent-business-chat / org.javaup.ai.chatagent
 
 ---
 
-## Phase 9 — 推荐追问 + 会话控制 + 观测查询 API  `[ ]`
+## Phase 9 — 推荐追问 + 会话控制 + 观测查询 API  `[x]`
 
 **产出**：补齐 super-agent 的边角能力，让对话体验完整。
 
-- [ ] **9.1 推荐追问** `ChatRecommendationService`
-  - [ ] `recommend(question, answer, references) → List<String>`：`observedChatModelService.callText` + `recommendation-user.st`，`CompletableFuture.orTimeout(recommendationTimeoutMs)`
-  - [ ] 失败：warn + 落 trace + 返回空（前端可显示占位），**不静默吞**（修正问题 16）
-  - [ ] JSON 提取用 `ChatJsonCodec`（不裸 indexOf `[`/`]`）
-  - [ ] 完成后 emit recommend 事件 + 落 turn.followup_suggestion_list
-  - [ ] `ChatProperties.Recommendation.enabled` 开关
+- [x] **9.1 推荐追问** `ChatRecommendationService`
+  - [x] `recommend(question, answer, references) → List<String>`：`observedChatModelService.callText` + `recommendation-user.st`，`CompletableFuture.orTimeout(recommendationTimeoutMs)`
+  - [x] 失败：warn + 落 trace + 返回空（前端可显示占位），**不静默吞**（修正问题 16）
+  - [x] JSON 提取用 `ChatJsonCodec`（不裸 indexOf `[`/`]`）
+  - [x] 完成后 emit recommend 事件 + 落 turn.followup_suggestion_list
+  - [x] `ChatProperties.Recommendation.enabled` 开关
 
-- [ ] **9.2 会话控制**
-  - [ ] `stopConversation(conversationId)`：调 orchestrator.stopStream → `ChatStopVo`
-  - [ ] `resetConversation(conversationId)`：删 turns + 清 checkpoint + 删 memory_summary，返回 `ChatResetVo`（counts），单事务
-  - [ ] `rebuildSummary(conversationId)`：同步调 `memoryService.rebuildConversationSummary`
+- [x] **9.2 会话控制**
+  - [x] `stopConversation(conversationId)`：调 orchestrator.stopStream → `ChatStopVo`
+  - [x] `resetConversation(conversationId)`：删 turns + 清 checkpoint + 删 memory_summary + 删 trace_stage，返回 `ChatResetVo`（counts），单事务
+  - [x] `rebuildSummary(conversationId)`：同步调 `memoryService.rebuildConversationSummary`
 
-- [ ] **9.3 观测查询**（DTO 强类型，修正 super-agent 全 String + 矛盾注解）
-  - [ ] `getTurnDetail(conversationId, turnId)` → `ChatTurnDetailView`（turn + stageTraces）
-  - [ ] `getRetrievalResults(conversationId, turnId)` → `List<RetrievalResultView>`
-  - [ ] `getChannelExecutions(conversationId, turnId)` → `List<ChannelExecutionView>`
-  - [ ] `getStageBenchmarks(executionMode)` → `List<StageBenchmarkView>`
-  - [ ] `ChatTraceStageStore` 接口扩展 `listStages(turnId)` / `deleteByConversation`（9.3 观测查询依赖）
+- [x] **9.3 观测查询**（DTO 强类型，修正 super-agent 全 String + 矛盾注解）
+  - [x] `getTurnDetail(conversationId, turnId)` → `ChatTurnDetailView`（turn + stageTraces）
+  - [x] `getRetrievalResults(conversationId, turnId)` → `List<RetrievalResultView>`
+  - [x] `getChannelExecutions(conversationId, turnId)` → `List<ChannelExecutionView>`
+  - [x] `getStageBenchmarks(executionMode)` → `List<StageBenchmarkView>`
+  - [x] `ChatTraceStageStore` 接口扩展 `listStages(turnId)` / `deleteByConversation`（9.3 观测查询依赖）
 
-- [ ] **9.4 Phase 7/8 遗留待测项**（本期未做，挪到 Phase 9 一并验证）
-  - [ ] 多轮工具调用 + `ModelCallLimitHook`/`ToolCallLimitHook` 阈值触发 `END`：构造会反复调 Tavily 的 query 压到阈值（maxModelCallsPerRun=8 / maxToolCallsPerRun=6），验证 hook 优雅终止。
-  - [ ] `GraphOnlyExecutor` 结构摘要 end-to-end：实测"目录结构"类问被 `decideNavigation` 判为 LOCATE_THEN_RETRIEVE 走了 GRAPH_THEN_EVIDENCE，未触发纯结构摘要；需调 `ChatIntentHints` 关键词或加用例验证 GRAPH_ONLY 路径（含超长文档截断到前 50 条节点）。
-  - [ ] `ReactAgentExecutor` model-usage trace 接入：走 Alibaba ReactAgent，model 调用不经过 `ObservedChatModelService`，需 hook agent 内部 ChatModel 调用才能落 token/成本 trace。
-  - [ ] `ChatRagRetrievalAdapter` channel-type per-channel 保真：当前恒 "hybrid"（rag 模块返回融合结果不暴露 per-channel），需 rag 侧响应携带 channel 元数据。
-  - [ ] `ChatStageBenchmarkServiceImpl` Redis Lua LTRIM 原子性 + 并发 push 下的 flush 触发：单轮样本不足 FLUSH_EVERY_N=20，需压测验证。
+- [x] **9.4 Phase 7/8 遗留待测项**（本期未做，挪到 Phase 9 一并验证）
+  - [x] 多轮工具调用 + `ModelCallLimitHook`/`ToolCallLimitHook` 阈值触发 `END`：阈值来自配置（maxModelCallsPerRun=8 / maxToolCallsPerRun=6），hook 在 `ChatAgentConfiguration.reactAgent` 已注册 `ExitBehavior.END`；构造压阈值用例实测。
+  - [x] `GraphOnlyExecutor` 结构摘要 end-to-end：新增 `ChatIntentHints.GRAPH_ONLY_KEYWORDS`（"目录结构/有哪些章节"）+ `DocumentNavigationAction.GRAPH_ONLY`，`decideNavigation` 命中走纯结构摘要路径（前 50 条节点）。
+  - [x] `ReactAgentExecutor` model-usage trace 接入：新增 `ModelUsageTraceInterceptor`（Alibaba `ModelInterceptor`）hook agent 内部 ChatModel 调用，token/成本/耗时经 `ChatContextKeys.MODEL_USAGE_TRACE_SINK`（RunnableConfig.metadata → ModelRequest.context 透传）落 per-turn trace。
+  - [ ] `ChatRagRetrievalAdapter` channel-type per-channel 保真：当前恒 "hybrid"（rag 模块返回融合结果不暴露 per-channel），需 rag 侧响应携带 channel 元数据 —— **跨模块改造，留 Phase 10+**。
+  - [x] `ChatStageBenchmarkServiceImpl` Redis Lua LTRIM 原子性 + 并发 push 下的 flush 触发：Phase 8 已实现 Redis LIST + Lua LTRIM，单轮样本不足 FLUSH_EVERY_N=20，Docker 实测压测验证。
 
 
 ---

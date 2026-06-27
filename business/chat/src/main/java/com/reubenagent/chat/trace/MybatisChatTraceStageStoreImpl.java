@@ -13,7 +13,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collections;
 import java.util.Date;
+import java.util.List;
 
 /**
  * Phase 8 落 {@code reuben_agent_chat_trace_stage} 的实现。
@@ -105,6 +107,41 @@ public class MybatisChatTraceStageStoreImpl implements MybatisChatTraceStageStor
             return ExecutionMode.valueOf(name).getCode();
         } catch (IllegalArgumentException e) {
             return null;
+        }
+    }
+
+    @Override
+    public List<ChatTraceStage> listStages(Long turnId) {
+        if (turnId == null) {
+            return Collections.emptyList();
+        }
+        try {
+            com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatTraceStage> wrapper =
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatTraceStage>()
+                            .eq(ChatTraceStage::getTurnId, turnId)
+                            .orderByAsc(ChatTraceStage::getStageOrder);
+            return mapper.selectList(wrapper);
+        } catch (Exception e) {
+            log.warn("列出轮次 stage 失败 → turnId={} err={}", turnId, e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    @Override
+    public int deleteByConversation(String conversationId) {
+        if (conversationId == null) {
+            return 0;
+        }
+        try {
+            com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatTraceStage> wrapper =
+                    new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<ChatTraceStage>()
+                            .eq(ChatTraceStage::getConversationId, conversationId);
+            int removed = mapper.delete(wrapper);
+            log.info("删除会话追踪 stage → conversationId={} removed={}", conversationId, removed);
+            return removed;
+        } catch (Exception e) {
+            log.warn("删除会话追踪 stage 失败 → conversationId={} err={}", conversationId, e.getMessage());
+            return 0;
         }
     }
 }

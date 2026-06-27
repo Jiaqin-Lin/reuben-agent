@@ -3,10 +3,12 @@ package com.reubenagent.chat.config;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.agent.hook.modelcalllimit.ModelCallLimitHook;
 import com.alibaba.cloud.ai.graph.agent.hook.toolcalllimit.ToolCallLimitHook;
+import com.alibaba.cloud.ai.graph.agent.interceptor.ModelInterceptor;
 import com.alibaba.cloud.ai.graph.agent.interceptor.toolerror.ToolErrorInterceptor;
 import com.alibaba.cloud.ai.graph.agent.interceptor.toolretry.ToolRetryInterceptor;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.mysql.CreateOption;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.mysql.MysqlSaver;
+import com.reubenagent.chat.agent.ModelUsageTraceInterceptor;
 import com.reubenagent.chat.agent.TavilySearchRequest;
 import com.reubenagent.chat.agent.TavilySearchTool;
 import com.reubenagent.chat.agent.TavilySearchToolResult;
@@ -160,6 +162,7 @@ public class ChatAgentConfiguration {
                                  TavilyToolInputFallbackInterceptor tavilyFallback,
                                  ToolRetryInterceptor toolRetryInterceptor,
                                  ToolErrorInterceptor toolErrorInterceptor,
+                                 ModelUsageTraceInterceptor modelUsageTraceInterceptor,
                                  ChatProperties properties) {
         ChatProperties.Agent cfg = properties.getAgent();
         ModelCallLimitHook modelCallLimitHook = ModelCallLimitHook.builder()
@@ -181,7 +184,7 @@ public class ChatAgentConfiguration {
                 .tools(tavilyTool)
                 .saver(chatMysqlSaver)
                 .hooks(modelCallLimitHook, toolCallLimitHook)
-                .interceptors(tavilyFallback, toolRetryInterceptor, toolErrorInterceptor)
+                .interceptors(tavilyFallback, toolRetryInterceptor, toolErrorInterceptor, modelUsageTraceInterceptor)
                 .parallelToolExecution(true)
                 .maxParallelTools(4)
                 .build();

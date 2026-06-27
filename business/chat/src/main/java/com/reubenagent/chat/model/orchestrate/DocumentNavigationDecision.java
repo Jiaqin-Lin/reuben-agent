@@ -43,6 +43,7 @@ public class DocumentNavigationDecision {
         return switch (action) {
             case DIRECT_RETRIEVAL -> com.reubenagent.chat.enums.ExecutionMode.RETRIEVAL;
             case LOCATE_THEN_RETRIEVE -> com.reubenagent.chat.enums.ExecutionMode.GRAPH_THEN_EVIDENCE;
+            case GRAPH_ONLY -> com.reubenagent.chat.enums.ExecutionMode.GRAPH_ONLY;
         };
     }
 }

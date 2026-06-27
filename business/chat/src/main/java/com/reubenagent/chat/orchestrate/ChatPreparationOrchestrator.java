@@ -249,6 +249,14 @@ public class ChatPreparationOrchestrator {
     private DocumentNavigationDecision decideNavigation(Long documentId, ChatRewriteResult rewrite,
                                                         ChatTraceRecorder traceRecorder) {
         String q = rewrite == null ? "" : rewrite.getRewrittenQuery();
+        // 阶段：纯结构摘要问（"目录结构/有哪些章节"）→ GRAPH_ONLY，只展示结构不检索证据
+        if (ChatIntentHints.matchesGraphOnly(q)) {
+            return DocumentNavigationDecision.builder()
+                    .action(DocumentNavigationAction.GRAPH_ONLY)
+                    .scopeMode(NavigationScopeMode.WHOLE_DOCUMENT)
+                    .reason("问题为纯结构摘要类")
+                    .build();
+        }
         boolean structureHint = ChatIntentHints.matchesStructure(q);
         DocumentNavigationAction action = structureHint
                 ? DocumentNavigationAction.LOCATE_THEN_RETRIEVE

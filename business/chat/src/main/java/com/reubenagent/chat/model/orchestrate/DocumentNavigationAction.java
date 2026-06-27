@@ -15,7 +15,9 @@ public enum DocumentNavigationAction implements BaseEnum {
     /** 不需要结构定位，直接证据检索 */
     DIRECT_RETRIEVAL(1, "直接证据检索"),
     /** 先定位章节结构，缩小检索范围再检索证据 */
-    LOCATE_THEN_RETRIEVE(2, "先定位章节再检索");
+    LOCATE_THEN_RETRIEVE(2, "先定位章节再检索"),
+    /** 仅展示结构摘要，不检索证据 */
+    GRAPH_ONLY(3, "纯结构摘要");
 
     @Getter
     private final Integer code;

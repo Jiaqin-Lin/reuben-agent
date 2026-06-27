@@ -36,6 +36,11 @@ public final class ChatIntentHints {
             "第几", "哪一节", "哪个章节", "目录", "结构", "在哪一", "章节"
     );
 
+    /** 纯结构摘要关键词：命中时走 GRAPH_ONLY（只展示目录结构，不检索证据） */
+    public static final Set<String> GRAPH_ONLY_KEYWORDS = Set.of(
+            "目录结构", "文档结构", "有哪些章节", "章节列表", "结构目录", "整篇结构", "结构是什么"
+    );
+
     private ChatIntentHints() {
     }
 
@@ -60,5 +65,13 @@ public final class ChatIntentHints {
             return false;
         }
         return STRUCTURE_KEYWORDS.stream().anyMatch(question::contains);
+    }
+
+    /** 命中纯结构摘要关键词 → GRAPH_ONLY 路径。 */
+    public static boolean matchesGraphOnly(String question) {
+        if (question == null || question.isBlank()) {
+            return false;
+        }
+        return GRAPH_ONLY_KEYWORDS.stream().anyMatch(question::contains);
     }
 }
