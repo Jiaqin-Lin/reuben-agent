@@ -16,6 +16,10 @@ public final class DocumentTestSchema {
     public static void dropTables(JdbcTemplate jdbcTemplate) {
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_chunk");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_parent_block");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_knowledge_route_trace");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_topic_document_relation");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_knowledge_topic_node");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_knowledge_scope_node");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_profile");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_strategy_step");
         jdbcTemplate.execute("DROP TABLE IF EXISTS reuben_agent_document_strategy_plan");
@@ -273,5 +277,96 @@ public final class DocumentTestSchema {
         createDocumentStrategyStepTable(jdbcTemplate);
         createDocumentParentBlockTable(jdbcTemplate);
         createDocumentChunkTable(jdbcTemplate);
+        createKnowledgeScopeNodeTable(jdbcTemplate);
+        createKnowledgeTopicNodeTable(jdbcTemplate);
+        createTopicDocumentRelationTable(jdbcTemplate);
+        createKnowledgeRouteTraceTable(jdbcTemplate);
+    }
+
+    // ==================== Knowledge 表 ====================
+
+    public static void createKnowledgeScopeNodeTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_knowledge_scope_node (
+                id BIGINT NOT NULL,
+                scope_code VARCHAR(128) NOT NULL,
+                scope_name VARCHAR(256) DEFAULT NULL,
+                parent_scope_code VARCHAR(128) DEFAULT NULL,
+                description VARCHAR(1024) DEFAULT NULL,
+                aliases VARCHAR(1024) DEFAULT NULL,
+                examples TEXT DEFAULT NULL,
+                sort_order INT DEFAULT 0,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id),
+                UNIQUE KEY uk_scope_code (scope_code)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
+    public static void createKnowledgeTopicNodeTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_knowledge_topic_node (
+                id BIGINT NOT NULL,
+                topic_code VARCHAR(128) NOT NULL,
+                topic_name VARCHAR(256) DEFAULT NULL,
+                scope_code VARCHAR(128) DEFAULT NULL,
+                description VARCHAR(1024) DEFAULT NULL,
+                aliases VARCHAR(512) DEFAULT NULL,
+                examples TEXT DEFAULT NULL,
+                answer_shape VARCHAR(64) DEFAULT NULL,
+                execution_preference VARCHAR(64) DEFAULT NULL,
+                sort_order INT DEFAULT 0,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id),
+                UNIQUE KEY uk_topic_code (topic_code)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
+    public static void createTopicDocumentRelationTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_topic_document_relation (
+                id BIGINT NOT NULL,
+                topic_code VARCHAR(128) NOT NULL,
+                document_id BIGINT NOT NULL,
+                relation_score DECIMAL(8,4) DEFAULT NULL,
+                relation_source VARCHAR(32) DEFAULT 'auto',
+                reason VARCHAR(1024) DEFAULT NULL,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id),
+                UNIQUE KEY uk_topic_document (topic_code, document_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
+    }
+
+    public static void createKnowledgeRouteTraceTable(JdbcTemplate jdbcTemplate) {
+        jdbcTemplate.execute("""
+            CREATE TABLE reuben_agent_knowledge_route_trace (
+                id BIGINT NOT NULL,
+                conversation_id VARCHAR(64) DEFAULT NULL,
+                turn_id BIGINT DEFAULT NULL,
+                question TEXT DEFAULT NULL,
+                rewrite_question TEXT DEFAULT NULL,
+                mode VARCHAR(32) DEFAULT NULL,
+                top_scopes_json TEXT DEFAULT NULL,
+                top_topics_json TEXT DEFAULT NULL,
+                top_documents_json TEXT DEFAULT NULL,
+                selected_document_id BIGINT DEFAULT NULL,
+                hit_selected_document TINYINT DEFAULT 0,
+                confidence DECIMAL(8,4) DEFAULT NULL,
+                route_status INT DEFAULT NULL,
+                error_msg VARCHAR(1024) DEFAULT NULL,
+                create_time DATETIME DEFAULT NULL,
+                update_time DATETIME DEFAULT NULL,
+                is_deleted TINYINT DEFAULT 0,
+                PRIMARY KEY (id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+            """);
     }
 }

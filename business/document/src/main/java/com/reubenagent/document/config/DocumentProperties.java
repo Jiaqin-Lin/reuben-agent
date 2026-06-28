@@ -130,8 +130,18 @@ public class DocumentProperties {
      */
     @Data
     public static class Elasticsearch {
-        /** 索引名称 */
+        /** 文档 chunk 关键词索引名称 */
         private String indexName = "reuben_document_chunk";
+        /** 知识路由索引名称 */
+        private String routeIndexName = "reuben_agent_knowledge_route";
+        /** 导航章节索引名称 */
+        private String navigationIndexName = "reuben_agent_document_navigation";
+        /** ES 是否启用（默认 true，无需手动设置，由 ObjectProvider 判空兜底） */
+        private boolean enabled = true;
+        /** 索引 analyzer（默认 ik_max_word），不可用时回退 standard */
+        private String analyzer = "ik_max_word";
+        /** 搜索 analyzer（默认 ik_smart），不可用时回退 standard */
+        private String searchAnalyzer = "ik_smart";
     }
 
     /**

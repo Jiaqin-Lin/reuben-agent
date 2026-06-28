@@ -207,19 +207,19 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ---
 
-## Phase 1 — Knowledge ES 路由索引  `[ ]`
+## Phase 1 — Knowledge ES 路由索引  `[x]`
 
 **产出**：知识路由的 ES 索引层，为路由引擎提供词法匹配通道。对标 super-agent `ElasticsearchKnowledgeRouteIndexService` + `KnowledgeRouteIndexRecord` + `KnowledgeRouteElasticsearchIndexInitializer`。
 
 ### 1.1 索引记录模型
 
-- [ ] **1.1.1 `KnowledgeRouteIndexRecord`**（`model/es/`）：
+- [x] **1.1.1 `KnowledgeRouteIndexRecord`**（`model/es/`）：
   - `routeId` / `entityType`(scope/topic/document) / `entityCode` / `documentId` / `scopeCode` / `scopeName` / `topicCode` / `topicName` / `documentName` / `businessCategory` / `displayName` / `descriptionText` / `aliasesText` / `examplesText` / `summaryText` / `routeText` / `entityTerms(List<String>)` / `tags(List<String>)`
   - `@Builder`，用于 ES 索引写入
 
 ### 1.2 ES 索引初始化
 
-- [ ] **1.2.1 `KnowledgeRouteElasticsearchIndexInitializer`**（`config/`）：
+- [x] **1.2.1 `KnowledgeRouteElasticsearchIndexInitializer`**（`config/`）：
   - `@PostConstruct` 检查 + 创建索引 `reuben_agent_knowledge_route`
   - 字段映射：`routeId`/`entityType`/`entityCode`/`scopeCode`/`topicCode`/`businessCategory` → `keyword`；`documentId` → `long`；`displayName`/`descriptionText`/`aliasesText`/`examplesText`/`summaryText`/`routeText`/`scopeName`/`topicName`/`documentName` → `text`（analyzer 来自配置）；`entityTerms`/`tags` → `keyword`
   - Analyzer 默认 `ik_max_word`（索引）/ `ik_smart`（搜索），失败回退 `standard` + **打 warn 日志**（修正 super-agent 问题 4）
@@ -227,14 +227,14 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 1.3 索引服务接口与实现
 
-- [ ] **1.3.1 `KnowledgeRouteIndexService` 接口**（`service/`）：
+- [x] **1.3.1 `KnowledgeRouteIndexService` 接口**（`service/`）：
   - `void refreshAll()` — 全量重建索引
   - `List<RouteLexicalHit> search(String routingText, String entityType, int size)` — 按实体类型搜索
   - `void deleteDocumentRoute(Long documentId)` — 按文档删除路由记录
 
-- [ ] **1.3.2 `RouteLexicalHit` 记录**：`routeId` / `entityCode` / `entityType` / `documentId` / `scopeCode` / `topicCode` / `documentName` / `score(double)`
+- [x] **1.3.2 `RouteLexicalHit` 记录**：`routeId` / `entityCode` / `entityType` / `documentId` / `scopeCode` / `topicCode` / `documentName` / `score(double)`
 
-- [ ] **1.3.3 `EsKnowledgeRouteIndexService`**（`service/impl/`）：
+- [x] **1.3.3 `EsKnowledgeRouteIndexService`**（`service/impl/`）：
   - `@ConditionalOnProperty(prefix="reuben.document.elasticsearch", name="enabled", havingValue="true", matchIfMissing=true)`
   - **`search()`**：bool query → filter(`term(entityType)`) + should(`matchPhrase(displayName, boost=12)` + `multiMatch(displayName^10/aliasesText^8/examplesText^6/summaryText^5/routeText^4/descriptionText^3, BestFields)` + per-entity-term `term(entityTerms, boost=9)`) → `minimumShouldMatch("1")` → size=max(cap=10)
   - **`refreshAll()`**：`deleteByQuery(matchAll)` → scope/topic/document 三类 batch `bulkIndex`
@@ -247,33 +247,33 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ---
 
-## Phase 2 — Knowledge 路由引擎  `[ ]`
+## Phase 2 — Knowledge 路由引擎  `[x]`
 
 **产出**：三级路由引擎 + 路由追踪。对标 super-agent `KnowledgeRouteService` / `KnowledgeRouteServiceImpl`（888 行拆为 3 个类）。
 
 ### 2.1 路由模型
 
-- [ ] **2.1.1 `KnowledgeRouteDecision`**（`model/route/`）：`scopes(List<ScopeRouteCandidate>)` / `topics(List<TopicRouteCandidate>)` / `documents(List<DocumentRouteCandidate>)` / `confidence(BigDecimal)` / `routeStatus(KnowledgeRouteStatus)` / `reason(String)`。`topDocument()` 返回最高分文档。
-- [ ] **2.1.2 `ScopeRouteCandidate`**：`scopeCode` / `scopeName` / `score(BigDecimal)` / `reason(String)`
-- [ ] **2.1.3 `TopicRouteCandidate`**：`topicCode` / `topicName` / `scopeCode` / `score(BigDecimal)` / `reason(String)`
-- [ ] **2.1.4 `DocumentRouteCandidate`**：`documentId` / `documentName` / `lastIndexTaskId` / `knowledgeScopeCode` / `knowledgeScopeName` / `businessCategory` / `documentTags` / `score(BigDecimal)` / `reason(String)`
+- [x] **2.1.1 `KnowledgeRouteDecision`**（`model/route/`）：`scopes(List<ScopeRouteCandidate>)` / `topics(List<TopicRouteCandidate>)` / `documents(List<DocumentRouteCandidate>)` / `confidence(BigDecimal)` / `routeStatus(KnowledgeRouteStatus)` / `reason(String)`。`topDocument()` 返回最高分文档。
+- [x] **2.1.2 `ScopeRouteCandidate`**：`scopeCode` / `scopeName` / `score(BigDecimal)` / `reason(String)`
+- [x] **2.1.3 `TopicRouteCandidate`**：`topicCode` / `topicName` / `scopeCode` / `score(BigDecimal)` / `reason(String)`
+- [x] **2.1.4 `DocumentRouteCandidate`**：`documentId` / `documentName` / `lastIndexTaskId` / `knowledgeScopeCode` / `knowledgeScopeName` / `businessCategory` / `documentTags` / `score(BigDecimal)` / `reason(String)`
 
 ### 2.2 分词与查询上下文
 
-- [ ] **2.2.1 `RouteQueryContext` 记录**（`model/route/`）：
+- [x] **2.2.1 `RouteQueryContext` 记录**（`model/route/`）：
   - `originalQuestion` / `rewriteQuestion` / `routingText`（拼接）/ `queryTerms(List<String>)` / `queryEmbedding(float[])`
-- [ ] **2.2.2 `KnowledgeRouteTokenizer`**（`support/`，纯函数工具类）：
+- [x] **2.2.2 `KnowledgeRouteTokenizer`**（`support/`，纯函数工具类）：
   - `tokenize(text, delimiters, minLen, maxCount) → List<String>` — 正则分隔 + 中文 n-gram 扩展（4+ 字词拆 2-6 gram）+ 去重截断
   - 分隔符从配置读（修正 super-agent 问题 13）
 
 ### 2.3 路由服务
 
-- [ ] **2.3.1 `KnowledgeRouteService` 接口**（`service/`）：
+- [x] **2.3.1 `KnowledgeRouteService` 接口**（`service/`）：
   - `KnowledgeRouteDecision route(String question, String rewriteQuestion)` — 全量路由
   - `void recordShadowRoute(conversationId, turnId, selectedDocumentId, question, rewriteQuestion)` — 影子评估
   - `void recordAutoRoute(conversationId, turnId, question, rewriteQuestion, KnowledgeRouteDecision)` — 自动路由记录
 
-- [ ] **2.3.2 `KnowledgeRouteServiceImpl`**（`service/impl/`，目标 <500 行）：
+- [x] **2.3.2 `KnowledgeRouteServiceImpl`**（`service/impl/`，目标 <500 行）：
   - 依赖：`IKnowledgeScopeNodeMapper` / `IKnowledgeTopicNodeMapper` / `ITopicDocumentRelationMapper` / `IDocumentMapper` / `IDocumentProfileMapper` / `ObjectProvider<EmbeddingModel>` / `ObjectProvider<KnowledgeRouteIndexService>` / `UidGenerator` / `KnowledgeRouteTraceService`
   - **`route()` 主流程**：
     1. `buildQueryContext(question, rewriteQuestion)` → `RouteQueryContext`
@@ -303,7 +303,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 2.4 路由追踪
 
-- [ ] **2.4.1 `KnowledgeRouteTraceService`**（`service/impl/`）：
+- [x] **2.4.1 `KnowledgeRouteTraceService`**（`service/impl/`）：
   - `saveTrace(RouteTraceContext)` → 异步写 `reuben_agent_knowledge_route_trace`（`@Async` 或用 `chatPostProcessExecutor` 同款线程池）
   - `RouteTraceContext`：conversationId / turnId / question / rewriteQuestion / mode / scopeCandidates / topicCandidates / documentCandidates / selectedDocumentId / confidence / routeStatus / errorMsg
   - `hitSelectedDocument`：检查 selectedDocumentId 是否在 top 3 documents 中
@@ -311,7 +311,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ---
 
-## Phase 3 — Knowledge 管理 API  `[ ]`
+## Phase 3 — Knowledge 管理 API  `[x]`
 
 **产出**：知识范围/主题/关系的 CRUD 接口 + 文档画像管理。对标 super-agent `KnowledgeManageController`。
 
@@ -319,7 +319,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 所有 `@Data @Builder @NoArgsConstructor @AllArgsConstructor`，入参 DTO 加 `@Valid`。
 
-- [ ] **3.1.1 入参 DTO**（`dto/`，新建 knowledge 子包或直接放 dto/）：
+- [x] **3.1.1 入参 DTO**（`dto/`，新建 knowledge 子包或直接放 dto/）：
   - `KnowledgeScopeSaveDto`：id(Long) / scopeCode(@NotBlank) / scopeName(@NotBlank) / parentScopeCode / description / aliases / examples / sortOrder
   - `KnowledgeScopeDeleteDto`：scopeCode(@NotBlank)
   - `KnowledgeTopicSaveDto`：id / topicCode(@NotBlank) / topicName(@NotBlank) / scopeCode(@NotBlank) / description / aliases / examples / answerShape / executionPreference / sortOrder
@@ -328,20 +328,20 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
   - `TopicDocumentRelationSaveDto`：topicCode(@NotBlank) / documentId(@NotNull) / relationScore / relationSource / reason
   - `TopicDocumentRelationRemoveDto`：topicCode(@NotBlank) / documentId(@NotNull)
   - `KnowledgeRouteTraceQueryDto`：conversationId / mode / routeStatus / pageNo(@Min(1)) / pageSize(@Min(1))
-- [ ] **3.1.2 出参 VO**（`vo/`）：
+- [x] **3.1.2 出参 VO**（`vo/`）：
   - `KnowledgeScopeItemVo` / `KnowledgeTopicItemVo` / `TopicDocumentRelationItemVo`（含 documentName / scopeName 冗余字段）
   - `KnowledgeRouteTraceItemVo` / `KnowledgeRouteTracePageVo`（复用 `PageVo`）
   - `DocumentProfileVo`（已有 `DocumentProfile` 实体，VO 只投影对外字段：documentId / summary / documentType / coreTopics / exampleQuestions / graphFriendly / profileSource / profileStatus / errorMsg）
 
 ### 3.2 Service
 
-- [ ] **3.2.1 `IKnowledgeManageService`**（`service/`）：
+- [x] **3.2.1 `IKnowledgeManageService`**（`service/`）：
   - Scope CRUD：`saveScope` / `deleteScope` / `listScopes`
   - Topic CRUD：`saveTopic` / `deleteTopic` / `listTopics(scopeCode)`
   - Relation CRUD：`saveRelation` / `removeRelation` / `listRelations(topicCode)`
   - Profile：`getProfile(documentId)` / `regenerateProfile(documentId)` / `batchRegenerateProfiles(documentIds)`
   - RouteTrace：`pageQuery(KnowledgeRouteTraceQueryDto) → PageVo<KnowledgeRouteTraceItemVo>`
-- [ ] **3.2.2 `KnowledgeManageServiceImpl`**（`service/impl/`）：
+- [x] **3.2.2 `KnowledgeManageServiceImpl`**（`service/impl/`）：
   - Scope/Topic 保存 upsert（按 unique code 冲突 update）
   - 软删除（`isDeleted=1`），不物理删
   - Relation 保存 upsert（按 `(topicCode, documentId)` 唯一约束）
@@ -350,7 +350,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 3.3 Controller
 
-- [ ] **3.3.1 `KnowledgeManageController`**（`controller/`，`@RestController @RequestMapping("/api/document/knowledge") @AllArgsConstructor @Tag(name="知识管理")`）：
+- [x] **3.3.1 `KnowledgeManageController`**（`controller/`，`@RestController @RequestMapping("/api/document/knowledge") @AllArgsConstructor @Tag(name="知识管理")`）：
   - `GET /scope/list` → `ApiResponse<List<KnowledgeScopeItemVo>>`
   - `POST /scope/save` → `ApiResponse<KnowledgeScopeItemVo>`
   - `POST /scope/delete` → `ApiResponse<Void>`
