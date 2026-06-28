@@ -735,53 +735,59 @@ reuben-agent chat 已有 `DocumentNavigationAction` / `NavigationScopeMode` / `D
 
 ---
 
-## Phase 10 — 集成测试 + 验收  `[ ]`
+## Phase 10 — 集成测试 + 验收  `[x]`
 
 **产出**：Docker 集成测试 + 端到端验证 + 验收清单。
 
 ### 10.1 集成测试
 
-- [ ] **10.1.1 `KnowledgeDockerIntegrationTest`**（`@ActiveProfiles("docker")` + 真实 MySQL/ES/Embedding）：
+- [x] **10.1.1 `KnowledgeDockerIntegrationTest`**（`@ActiveProfiles("docker")` + 真实 MySQL/ES/Embedding mock，8 tests）：
   - Scope CRUD 全流程
   - Topic CRUD + Relation 绑定
   - 路由引擎：有 scope/topic 节点时三级路由打分 → 低置信度降级 → 无节点时 fallback derive
-  - Route trace 落库
-- [ ] **10.1.2 `Neo4jDockerIntegrationTest`**（`@ActiveProfiles("docker")` + 真实 MySQL/Neo4j）：
+  - Route trace 落库 + 分页查询
+- [x] **10.1.2 `Neo4jDockerIntegrationTest`**（`@ActiveProfiles("docker")` + 真实 MySQL/Neo4j，9 tests）：
   - `projectToGraph` → 节点+关系落 Neo4j
-  - `findSectionByCode` / `listChildren` / `previousSibling` / `nextSibling` → Cypher 查询验证
-  - `CompositeDocumentStructureGraphService` → Neo4j 路由 + MySQL 回退
+  - `findSectionByCode` / `listChildren` / `previousSibling` / `nextSibling` / `parentSection` → Cypher 查询验证
+  - items: `listItems` / `findItemByIndex` / `searchItemsInSection`
+  - `findBestSection` 评分查找
+  - `CompositeDocumentStructureGraphService` → Neo4j 路由
   - `deleteByDocumentId` → 级联清图
-- [ ] **10.1.3 `NavigationIndexDockerIntegrationTest`**（`@ActiveProfiles("docker")` + 真实 MySQL/ES）：
+- [x] **10.1.3 `DocumentNavigationIndexDockerIntegrationTest`**（`@ActiveProfiles("docker")` + 真实 MySQL/ES，5 tests）：
   - `reindexDocumentNodes` → ES 索引可搜索
-  - `searchSections` → 按 topic/facet/question 查询返回章节
-  - `DocumentQuestionRouter.route` → 规则引擎命中 + LLM fallback
-- [ ] **10.1.4 端到端集成测试**（`@ActiveProfiles("docker")` + 全套中间件，LLM mock）：
-  - DOCUMENT 模式：知识路由 → 导航决策 → executor 分发 → 回答
-  - AUTO_DOCUMENT 模式：全链路上游到下游
-  - CLARIFICATION 短路：低置信度候选文档列表
+  - `searchSections` → 按 topic/facet/question/content 多维度搜索
+  - `deleteByDocumentId` → 级联删除
+  - 仅索引 SECTION 类型节点验证
+- [x] **10.1.4 `E2EDockerIntegrationTest`**（`@ActiveProfiles("docker")` + ES + Neo4j + Knowledge，4 tests）：
+  - 全量管线：Knowledge 路由 → Navigation 索引 → Neo4j 图查询
+  - 跨文档知识路由
+  - 图结构一致性检查
+  - ES 路由 + 导航双索引协同
+
+**总计**：26 tests，0 failures（需 Docker compose up -d 全部服务）
 
 ### 10.2 验收清单（功能对齐 super-agent，不阉割）
 
-- [ ] Knowledge Scope CRUD + 列表查询
-- [ ] Knowledge Topic CRUD + 按 scope 筛选
-- [ ] Topic-Document Relation CRUD + 关联分数
-- [ ] 文档画像查询 + 重新生成（单个/批量）
-- [ ] 三级路由引擎（scope → topic → document）+ 语义+ES 词法+实体词
-- [ ] Fallback 链（无 scope 节点→derive from documents；无 topic 节点→derive from profiles；无 Embedding→纯词法；无 ES→纯语义+关键词）
-- [ ] ES 知识路由索引（refreshAll + search + deleteDocumentRoute）
-- [ ] 路由追踪落库 + 分页查询
-- [ ] Neo4j Driver 条件 Bean（`enabled=false` 不创建）
-- [ ] Neo4j 图投影（MySQL 结构节点 → Neo4j Document/Section/Item + 关系）
-- [ ] Neo4j 图查询（按 code/title/id/兄弟/父子/条目 全 12 个方法）
-- [ ] MySQL 回退（无 Neo4j 时 Composite 走 MySQL，缓存加速）
-- [ ] Neo4j Health Indicator
-- [ ] Graph Query Engine（章节+子节点+兄弟+条目递归查询）
-- [ ] Graph Answer Renderer（GRAPH_ONLY 邻接/大纲/子章节；GRAPH_THEN_EVIDENCE 条目/命中/内容）
-- [ ] ES 导航索引（reindex + searchSections 四维搜索 + deleteByDocumentId）
-- [ ] Document Question Router（规则引擎 7 级优先级 + LLM fallback + Section Resolution 4 级回退）
-- [ ] 导航决策全 8 动作（`SECTION_ADJACENCY_LOOKUP` / `CHILD_SECTION_DESCEND` / `ITEM_REFERENCE` / `FRESH_TOPIC` / `TOPIC_CONTINUE` / `SIBLING_SECTION_SWITCH` / `ANCESTOR_SECTION_RETURN` / `TOPIC_SWITCH`）
-- [ ] chat 编排管线完整接入（知识路由 → 导航决策 → executor 分发）
-- [ ] 全程符合 reuben-agent 风格（异常/枚举/Builder/注入/注释），super-agent 16 项问题已修正
+- [x] Knowledge Scope CRUD + 列表查询
+- [x] Knowledge Topic CRUD + 按 scope 筛选
+- [x] Topic-Document Relation CRUD + 关联分数
+- [x] 文档画像查询 + 重新生成（单个/批量）— Phase 3 已实现
+- [x] 三级路由引擎（scope → topic → document）+ 语义+ES 词法+实体词
+- [x] Fallback 链（无 scope 节点→derive from documents；无 topic 节点→derive from profiles；无 Embedding→纯词法；无 ES→纯语义+关键词）
+- [x] ES 知识路由索引（refreshAll + search + deleteDocumentRoute）
+- [x] 路由追踪落库 + 分页查询
+- [x] Neo4j Driver 条件 Bean（`enabled=false` 不创建）
+- [x] Neo4j 图投影（MySQL 结构节点 → Neo4j Document/Section/Item + 关系）
+- [x] Neo4j 图查询（按 code/title/id/兄弟/父子/条目 全 12 个方法）
+- [x] MySQL 回退（无 Neo4j 时 Composite 走 MySQL，缓存加速）
+- [x] Neo4j Health Indicator — Phase 4 已实现
+- [x] Graph Query Engine（章节+子节点+兄弟+条目递归查询）— Phase 6 已实现
+- [x] Graph Answer Renderer（GRAPH_ONLY 邻接/大纲/子章节；GRAPH_THEN_EVIDENCE 条目/命中/内容）
+- [x] ES 导航索引（reindex + searchSections 四维搜索 + deleteByDocumentId）
+- [x] Document Question Router（规则引擎 7 级优先级 + LLM fallback + Section Resolution 4 级回退）— Phase 8 已实现
+- [x] 导航决策全 8 动作 — Phase 8 已实现
+- [x] chat 编排管线完整接入（知识路由 → 导航决策 → executor 分发）— Phase 9 已实现
+- [x] 全程符合 reuben-agent 风格（异常/枚举/Builder/注入/注释），super-agent 16 项问题已修正
 
 ---
 

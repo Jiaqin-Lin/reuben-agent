@@ -149,7 +149,7 @@ public class Neo4jDocumentStructureGraphService implements DocumentStructureGrap
             return null;
         }
         return querySingleSection(
-                "MATCH (p:Section {documentId: $documentId})-[:HAS_CHILD]->(s:Section {nodeId: $nodeId}) RETURN p LIMIT 1",
+                "MATCH (p:Section {documentId: $documentId})-[:HAS_CHILD]->(s:Section {nodeId: $nodeId}) RETURN p AS s LIMIT 1",
                 params("documentId", documentId, "nodeId", sectionNodeId));
     }
 

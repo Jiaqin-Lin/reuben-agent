@@ -81,10 +81,10 @@ public class KnowledgeRouteElasticsearchIndexInitializer {
                         .analysis(a -> a
                                 .analyzer("default_analyzer", da -> da
                                         .custom(ca -> ca
-                                                .tokenizer("ik_max_word")))
+                                                .tokenizer(analyzer)))
                                 .analyzer("default_search_analyzer", dsa -> dsa
                                         .custom(csa -> csa
-                                                .tokenizer("ik_smart")))))
+                                                .tokenizer(searchAnalyzer)))))
                 .mappings(m -> m
                         .properties("routeId", p -> p.keyword(k -> k))
                         .properties("entityType", p -> p.keyword(k -> k))
