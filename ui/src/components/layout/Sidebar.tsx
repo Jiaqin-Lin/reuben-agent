@@ -20,8 +20,8 @@ interface NavItem {
 const items: NavItem[] = [
   { to: '/documents', label: '文档管理', icon: Files },
   { to: '/retrieval', label: '召回测试', icon: MagnifyingGlass },
-  { to: '/chat', label: '对话', icon: ChatCircle, soon: true },
-  { to: '/conversations', label: '会话管理', icon: ChatCenteredDots, soon: true },
+  { to: '/chat', label: '对话', icon: ChatCircle },
+  { to: '/conversations', label: '会话管理', icon: ChatCenteredDots },
 ];
 
 export function Sidebar() {
