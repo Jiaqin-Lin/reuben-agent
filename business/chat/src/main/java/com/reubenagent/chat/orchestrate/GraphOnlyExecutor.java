@@ -1,14 +1,16 @@
 package com.reubenagent.chat.orchestrate;
 
+import com.reubenagent.chat.config.ChatProperties;
 import com.reubenagent.chat.enums.ChatTraceStageCode;
 import com.reubenagent.chat.enums.ExecutionMode;
+import com.reubenagent.chat.service.ObservedChatModelService;
 import com.reubenagent.chat.support.ChatStreamEventWriter;
 import com.reubenagent.chat.support.SinkEmitHelper;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
-import com.reubenagent.document.entity.DocumentStructureNode;
-import com.reubenagent.document.service.IDocumentStructureNodeService;
+import com.reubenagent.document.model.graph.GraphSection;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -19,14 +21,14 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 结构摘要执行器 —— 仅返回文档目录结构，不调用 LLM、不检索证据。
+ * 结构摘要执行器 —— 仅返回文档目录结构，不检索证据。
  *
  * <p>对标 super-agent {@code GraphOnlyExecutor}，reuben 修正：
  * <ul>
- *   <li>直接复用 {@link IDocumentStructureNodeService#listDocumentNodes}，不重造结构读取；</li>
- *   <li>结构摘要以纯文本拼接（前 N 条 nodeNo + title + sectionPath），不调用 LLM；</li>
- *   <li>无证据 → {@code recordEvidenceBudget(0,0)} 落 trace；</li>
- *   <li>阻塞读 DB 委托 {@code Mono.fromCallable + subscribeOn(boundedElastic)}。</li>
+ *   <li>结构读取复用 {@link StructureGraphQueryEngine#safeListSections}（背后是 Composite 图服务，Neo4j 优先 MySQL 回退）；</li>
+ *   <li>邻接/大纲类问题经 {@link GraphAnswerRenderer} 精准渲染；</li>
+ *   <li>大文档（节点数 &gt; 阈值）加 LLM 压缩摘要，阈值进 {@link ChatProperties.Navigation}；</li>
+ *   <li>无证据 → {@code recordEvidenceBudget(0,0)} 落 trace；阻塞读 DB 委托 boundedElastic。</li>
  * </ul></p>
  *
  * @author reuben
@@ -37,11 +39,11 @@ import java.util.Map;
 @AllArgsConstructor
 public class GraphOnlyExecutor implements ConversationExecutor {
 
-    /** 结构摘要最大节点数，避免超长文档刷屏。 */
-    private static final int MAX_NODES_IN_SUMMARY = 50;
-
-    private final IDocumentStructureNodeService structureNodeService;
+    private final StructureGraphQueryEngine graphQueryEngine;
+    private final GraphAnswerRenderer answerRenderer;
+    private final ObservedChatModelService observedChatModelService;
     private final ChatStreamEventWriter eventWriter;
+    private final ChatProperties properties;
 
     @Override
     public ExecutionMode mode() {
@@ -59,44 +61,105 @@ public class GraphOnlyExecutor implements ConversationExecutor {
                                 taskInfo.getConversationId(), taskInfo.getTurnId()));
                 return Flux.just("未选择文档，无法展示结构。");
             }
+            String question = taskInfo.getExecutionPlan().getOriginalQuestion();
             emitThinking(taskInfo, "正在加载文档结构。");
-            return Mono.fromCallable(() -> structureNodeService.listDocumentNodes(documentId, null))
+            return Mono.fromCallable(() -> renderGraphOnly(documentId, question, taskInfo))
                     .subscribeOn(Schedulers.boundedElastic())
                     .onErrorMap(Exception.class, e -> {
-                        log.warn("文档结构读取失败 → documentId={} err={}",
-                                documentId, e.getMessage());
+                        log.warn("文档结构读取失败 → documentId={} err={}", documentId, e.getMessage());
                         return e;
                     })
-                    .flatMapMany(nodes -> {
-                        String summary = buildSummary(nodes, documentId);
+                    .flatMapMany(summary -> {
                         recordEvidenceBudget(taskInfo, 0, 0);
                         return Flux.just(summary);
                     });
         });
     }
 
-    /** 拼接结构摘要：前 N 条 `nodeNo + " " + title + " (path=" + sectionPath + ")"`。 */
-    private String buildSummary(List<DocumentStructureNode> nodes, Long documentId) {
-        if (nodes == null || nodes.isEmpty()) {
+    /** GRAPH_ONLY 渲染主逻辑：先尝试邻接/大纲精准渲染，否则全结构摘要（大文档 LLM 压缩）。 */
+    private String renderGraphOnly(Long documentId, String question, ChatTaskInfo taskInfo) {
+        // 邻接查询：按问题里的章节线索定位后渲染兄弟
+        if (question != null && answerRenderer.asksAdjacency(question)) {
+            GraphSection best = locateSectionByQuestion(documentId, question);
+            if (best != null) {
+                var siblings = graphQueryEngine.findSectionWithSiblings(documentId, best.getNodeId());
+                if (siblings != null) {
+                    return answerRenderer.renderAdjacency(siblings);
+                }
+            }
+        }
+        // 大纲查询：渲染目标章节的子章节
+        if (question != null && answerRenderer.asksChildren(question)) {
+            GraphSection best = locateSectionByQuestion(documentId, question);
+            Long sectionId = best != null ? best.getNodeId() : null;
+            var withChildren = sectionId != null
+                    ? graphQueryEngine.findSectionWithChildren(documentId, sectionId)
+                    : null;
+            if (withChildren != null) {
+                return answerRenderer.renderChildren(withChildren);
+            }
+        }
+        // 默认：全结构摘要
+        List<GraphSection> sections = graphQueryEngine.safeListSections(documentId);
+        return renderStructureSummary(sections, documentId, question, taskInfo);
+    }
+
+    /** 在文档章节中按问题关键词粗略定位最佳章节 */
+    private GraphSection locateSectionByQuestion(Long documentId, String question) {
+        if (question == null || question.isBlank()) {
+            return null;
+        }
+        try {
+            return graphQueryEngine.graphService().findBestSection(documentId, question, null);
+        } catch (Exception e) {
+            log.warn("章节定位失败 → documentId={} err={}", documentId, e.getMessage());
+            return null;
+        }
+    }
+
+    /** 全结构摘要：小文档直接拼接，大文档调用 LLM 压缩 */
+    private String renderStructureSummary(List<GraphSection> sections, Long documentId,
+                                          String question, ChatTaskInfo taskInfo) {
+        if (sections == null || sections.isEmpty()) {
             return "文档（id=" + documentId + "）暂无可用的结构信息。";
         }
-        int limit = Math.min(nodes.size(), MAX_NODES_IN_SUMMARY);
-        StringBuilder sb = new StringBuilder(128 * limit);
-        sb.append("文档结构如下（共 ").append(nodes.size()).append(" 个节点，展示前 ")
-                .append(limit).append(" 个）：\n");
-        for (int i = 0; i < limit; i++) {
-            DocumentStructureNode node = nodes.get(i);
-            sb.append(node.getNodeNo() == null ? "-" : node.getNodeNo()).append(' ')
-                    .append(node.getTitle() == null ? "" : node.getTitle());
-            if (node.getSectionPath() != null && !node.getSectionPath().isBlank()) {
-                sb.append(" (path=").append(node.getSectionPath()).append(')');
+        ChatProperties.Navigation nav = properties.getNavigation();
+        if (sections.size() > nav.getStructureSummaryNodeThreshold()) {
+            String compressed = compressWithLlm(sections, documentId, question, taskInfo);
+            if (compressed != null) {
+                return compressed;
             }
-            sb.append('\n');
         }
-        if (nodes.size() > limit) {
-            sb.append("...（剩余 ").append(nodes.size() - limit).append(" 个节点已省略）\n");
+        int limit = Math.min(sections.size(), nav.getStructureSummaryMaxNodes());
+        StringBuilder sb = new StringBuilder(128 * limit);
+        sb.append("文档结构如下（共 ").append(sections.size()).append(" 个章节，展示前 ").append(limit).append(" 个）：\n");
+        for (int i = 0; i < limit; i++) {
+            sb.append(i + 1).append(". ").append(sections.get(i).displayTitle()).append('\n');
+        }
+        if (sections.size() > limit) {
+            sb.append("...（剩余 ").append(sections.size() - limit).append(" 个章节已省略）\n");
         }
         return sb.toString();
+    }
+
+    /** 大文档结构摘要 LLM 压缩，失败返回 null 回退拼接 */
+    private String compressWithLlm(List<GraphSection> sections, Long documentId,
+                                   String question, ChatTaskInfo taskInfo) {
+        try {
+            StringBuilder outline = new StringBuilder();
+            for (GraphSection s : sections) {
+                outline.append("- ").append(s.displayTitle()).append('\n');
+            }
+            String prompt = "以下是文档（共 " + sections.size() + " 个章节）的目录结构，请用简洁的中文归纳其主要内容分组与逻辑结构，控制在 400 字以内：\n"
+                    + outline;
+            ChatOptions options = ChatOptions.builder().temperature(0.2).build();
+            return observedChatModelService.callText(
+                    "graph-only-structure-summary", prompt, options,
+                    taskInfo.getTraceRecorder() == null ? null : taskInfo.getTraceRecorder().traceSink());
+        } catch (Exception e) {
+            log.warn("结构摘要 LLM 压缩失败，回退拼接 → documentId={} err={}", documentId, e.getMessage());
+            return null;
+        }
     }
 
     private void recordEvidenceBudget(ChatTaskInfo taskInfo, int rendered, int omitted) {

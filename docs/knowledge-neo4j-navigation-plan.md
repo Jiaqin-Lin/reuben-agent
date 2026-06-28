@@ -369,13 +369,13 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ---
 
-## Phase 4 — Neo4j 地基：依赖 / 配置 / Driver / Health / 图模型  `[ ]`
+## Phase 4 — Neo4j 地基：依赖 / 配置 / Driver / Health / 图模型  `[x]`
 
 **产出**：Neo4j 条件基础设施 + 图模型 POJO。对标 super-agent `DocumentManageNeo4jConfiguration` + `DocumentGraphNeo4jHealthIndicator` + `model/graph/*`。
 
 ### 4.1 依赖
 
-- [ ] **4.1.1 `business/document/pom.xml`** 新增：
+- [x] **4.1.1 `business/document/pom.xml`** 新增：
   ```xml
   <dependency>
       <groupId>org.neo4j.driver</groupId>
@@ -386,7 +386,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 4.2 配置
 
-- [ ] **4.2.1 `DocumentProperties` 追加 `Neo4j` 嵌套配置**：
+- [x] **4.2.1 `DocumentProperties` 追加 `Neo4j` 嵌套配置**：
   ```java
   static class Neo4j {
       boolean enabled = false;              // 默认关闭
@@ -399,18 +399,18 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
       long connectionAcquisitionTimeoutMs = 5000;
   }
   ```
-- [ ] **4.2.2 `application.yml`** 已有 `spring.neo4j.*` 配置（docker-compose 已拉 Neo4j），确认与 `reuben.document.neo4j.*` 不冲突。`DocumentManageNeo4jConfiguration` 用自己的 `Driver` Bean，不从 `spring.neo4j` 自动配置读取。
+- [x] **4.2.2 `application.yml`** 已有 `spring.neo4j.*` 配置（docker-compose 已拉 Neo4j），确认与 `reuben.document.neo4j.*` 不冲突。`DocumentManageNeo4jConfiguration` 用自己的 `Driver` Bean，不从 `spring.neo4j` 自动配置读取。
 
 ### 4.3 Driver Bean
 
-- [ ] **4.3.1 `DocumentManageNeo4jConfiguration`**（`config/`）：
+- [x] **4.3.1 `DocumentManageNeo4jConfiguration`**（`config/`）：
   - `@ConditionalOnProperty(prefix="reuben.document.neo4j", name="enabled", havingValue="true")`
   - `@Bean(destroyMethod = "close") DocumentManageNeo4jDriver` — `GraphDatabase.driver(uri, AuthTokens.basic(user, pass), Config.builder().withConnectionTimeout(...).withMaxConnectionPoolSize(...).build())`
   - 方法名即 Bean 名 → `documentManageNeo4jDriver`
 
 ### 4.4 Health Indicator
 
-- [ ] **4.4.1 `DocumentGraphNeo4jHealthIndicator`**（`config/`）：
+- [x] **4.4.1 `DocumentGraphNeo4jHealthIndicator`**（`config/`）：
   - `@Component @ConditionalOnBean(name = "documentManageNeo4jDriver") implements HealthIndicator`
   - `health()`：`try(Session) { session.run("RETURN 1 AS ok").consume() }` → UP + database 详情；catch → DOWN + 异常信息
 
@@ -418,22 +418,22 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 全部 `@Data @Builder @NoArgsConstructor @AllArgsConstructor`，放 `model/graph/`。
 
-- [ ] **4.5.1 `GraphSection`**：nodeId / documentId / parseTaskId / nodeNo / depth / parentNodeId / prevSiblingNodeId / nextSiblingNodeId / nodeCode / title / anchorText / sectionPath / canonicalPath / contentText。`displayTitle()` → sectionPath > (nodeCode + title) > title
-- [ ] **4.5.2 `GraphItem`**：nodeId / documentId / parseTaskId / nodeNo / nodeType / sectionNodeId / prevSiblingNodeId / nextSiblingNodeId / title / anchorText / sectionPath / canonicalPath / contentText / itemIndex。`displayText()` → contentText > anchorText > title
-- [ ] **4.5.3 `GraphQueryResult`**：targetSection / parentSection / previousSibling / nextSibling / targetItem / children(List) / matchedItems(List) / allItems(List)
-- [ ] **4.5.4 `GraphSectionWithChildren`**：section + children
-- [ ] **4.5.5 `GraphSectionWithSiblings`**：section + parent + previousSibling + nextSibling
-- [ ] **4.5.6 `GraphItemWithContext`**：section + item + siblingItems
+- [x] **4.5.1 `GraphSection`**：nodeId / documentId / parseTaskId / nodeNo / depth / parentNodeId / prevSiblingNodeId / nextSiblingNodeId / nodeCode / title / anchorText / sectionPath / canonicalPath / contentText。`displayTitle()` → sectionPath > (nodeCode + title) > title
+- [x] **4.5.2 `GraphItem`**：nodeId / documentId / parseTaskId / nodeNo / nodeType / sectionNodeId / prevSiblingNodeId / nextSiblingNodeId / title / anchorText / sectionPath / canonicalPath / contentText / itemIndex。`displayText()` → contentText > anchorText > title
+- [x] **4.5.3 `GraphQueryResult`**：targetSection / parentSection / previousSibling / nextSibling / targetItem / children(List) / matchedItems(List) / allItems(List)
+- [x] **4.5.4 `GraphSectionWithChildren`**：section + children
+- [x] **4.5.5 `GraphSectionWithSiblings`**：section + parent + previousSibling + nextSibling
+- [x] **4.5.6 `GraphItemWithContext`**：section + item + siblingItems
 
 ---
 
-## Phase 5 — Neo4j 图投影 + 查询服务 + 组合路由  `[ ]`
+## Phase 5 — Neo4j 图投影 + 查询服务 + 组合路由  `[x]`
 
 **产出**：MySQL 结构节点 → Neo4j 投影同步 + Cypher 查询 + MySQL 回退 + 组合路由。对标 super-agent `Neo4jDocumentStructureGraphProjectionService` + `Neo4jDocumentStructureGraphService` + `MysqlDocumentStructureGraphService` + `CompositeDocumentStructureGraphService`。
 
 ### 5.1 图服务接口
 
-- [ ] **5.1.1 `DocumentStructureGraphService` 接口**（`service/`）：
+- [x] **5.1.1 `DocumentStructureGraphService` 接口**（`service/`）：
   ```java
   boolean isGraphAvailable(Long documentId);
   GraphSection findSectionById(Long documentId, Long sectionNodeId);
@@ -453,7 +453,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 5.2 Neo4j 投影服务
 
-- [ ] **5.2.1 `Neo4jDocumentStructureGraphProjectionService`**（`service/impl/`）：
+- [x] **5.2.1 `Neo4jDocumentStructureGraphProjectionService`**（`service/impl/`）：
   - `@Service @ConditionalOnBean(name = "documentManageNeo4jDriver")`
   - **`@PostConstruct initSchema()`**：创建 8 个索引（Document.documentId / Section.nodeId / Section.documentId / Section.(documentId,nodeId) / Section.(documentId,nodeCode) / Section.(documentId,normalizedTitle) / Item.nodeId / Item.(documentId,nodeId)）——仅不存在时创建
   - **`projectToGraph(documentId, parseTaskId)`**：单 `session.executeWrite` 事务内：
@@ -472,7 +472,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 5.3 Neo4j 图查询服务
 
-- [ ] **5.3.1 `Neo4jDocumentStructureGraphService`**（`service/impl/`）：
+- [x] **5.3.1 `Neo4jDocumentStructureGraphService`**（`service/impl/`）：
   - `@Service @ConditionalOnBean(name = "documentManageNeo4jDriver")`
   - 每个方法使用 **try-with-resources Session**（`SessionConfig.forDatabase(database)`），执行参数化 Cypher，映射到 `GraphSection`/`GraphItem`（修正 super-agent 问题 11：session 泄漏）
   - 异常打 warn + 抛 `DocumentException(NEO4J_QUERY_FAILED)`（修正 super-agent 问题 12：静默吞）
@@ -481,7 +481,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 5.4 MySQL 回退服务
 
-- [ ] **5.4.1 `MysqlDocumentStructureGraphService`**（`service/impl/`）：
+- [x] **5.4.1 `MysqlDocumentStructureGraphService`**（`service/impl/`）：
   - `@Service("mysqlDocumentStructureGraphService")`
   - 全部实现通过 `IDocumentStructureNodeService.listDocumentNodes(documentId, null)` 获取全量节点
   - **增加 `ConcurrentHashMap<Long, List<GraphSection>>` 缓存**（per documentId），解析完成时 `projectToGraph` 调用后主动刷新；`deleteByDocumentId` 后主动清除。大文档（>2000 节点）降级每次 SQL 直查（修正 super-agent 问题 5：O(n) per query）
@@ -490,7 +490,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 5.5 组合路由服务
 
-- [ ] **5.5.1 `CompositeDocumentStructureGraphService`**（`service/impl/`）：
+- [x] **5.5.1 `CompositeDocumentStructureGraphService`**（`service/impl/`）：
   - `@Primary @Service @AllArgsConstructor`
   - 依赖：`MysqlDocumentStructureGraphService` + `ObjectProvider<Neo4jDocumentStructureGraphService>`
   - **`delegate(documentId)`**：Neo4j bean 存在 → 调 `isGraphAvailable(documentId)` → true 走 Neo4j，false 走 MySQL。使用 `ConcurrentHashMap<Long, Boolean> graphAvailabilityCache`（修正 super-agent 问题 6：每次查询一次 Cypher）
@@ -498,7 +498,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ---
 
-## Phase 6 — Neo4j 图查询引擎 + Executor 增强  `[ ]`
+## Phase 6 — Neo4j 图查询引擎 + Executor 增强  `[x]`
 
 **产出**：chat 侧可用的图查询引擎 + 图答案渲染 + 增强现有 `GraphOnlyExecutor` / `GraphThenEvidenceExecutor` 接入 Neo4j。对标 super-agent `StructureGraphQueryEngine` + `GraphAnswerRenderer`。
 
@@ -506,7 +506,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 代码放 `business/chat`（chat 侧消费 document 侧 `DocumentStructureGraphService`）。
 
-- [ ] **6.1.1 `StructureGraphQueryEngine`**（`chat/orchestrate/` 或 `chat/support/`）：
+- [x] **6.1.1 `StructureGraphQueryEngine`**（`chat/orchestrate/` 或 `chat/support/`）：
   - `@Service @AllArgsConstructor`，注入 `DocumentStructureGraphService`（按类型，实际是 `CompositeDocumentStructureGraphService`）
   - `findSectionWithChildren(documentId, topic) → GraphSectionWithChildren` — `findBestSection` → `listChildren`
   - `findSectionWithChildren(documentId, sectionNodeId) → GraphSectionWithChildren`
@@ -518,7 +518,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 6.2 图答案渲染器
 
-- [ ] **6.2.1 `GraphAnswerRenderer`**（`chat/orchestrate/`）：
+- [x] **6.2.1 `GraphAnswerRenderer`**（`chat/orchestrate/`）：
   - **`GRAPH_ONLY` 模式**：
     - 邻接问题（"上一节/下一节/属于哪个章节"）→ 渲染 target + parent + prev/next sibling
     - 子章节问题（"包含哪些章节"）→ 渲染 target + children 列表
@@ -531,33 +531,33 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 6.3 Executor 增强
 
-- [ ] **6.3.1 增强 `GraphOnlyExecutor`**（`chat/orchestrate/`）：
+- [x] **6.3.1 增强 `GraphOnlyExecutor`**（`chat/orchestrate/`）：
   - 注入 `StructureGraphQueryEngine` + `GraphAnswerRenderer`（替代当前直接查 MySQL `DocumentStructureNodeService`）
   - 大文档（>50 节点）加 LLM 压缩摘要：`observedChatModelService.callText(stageName, structureText, ...)`（修正 super-agent 问题 10），阈值进配置 `ChatProperties.Graph.structureSummaryNodeThreshold`
   - `execute()` 通过 `NavigationDecision.structureAnchor` 决定查哪个章节
 
-- [ ] **6.3.2 增强 `GraphThenEvidenceExecutor`**（`chat/orchestrate/`）：
+- [x] **6.3.2 增强 `GraphThenEvidenceExecutor`**（`chat/orchestrate/`）：
   - 注入 `StructureGraphQueryEngine` + `ChatRagRetrievalAdapter`
   - 先 `buildGraphResult()` 定位章节 → 缩小 `structureNodeId` filter → 调 `ChatRagRetrievalAdapter.retrieveWithNodeFilter()`
   - 证据校验：有 itemAnchor 则必须找到目标 item；否则校验 contentText 非空
 
-- [ ] **6.3.3 增强 `ChatPreparationOrchestrator.decideNavigation()`**：接入 `StructureGraphQueryEngine` 辅助判断结构定位类问题（当前 `decideNavigation` 始终返回 `WHOLE_DOCUMENT`，Phase 8 接入 `DocumentQuestionRouter` 后改为真正的导航决策）
+- [x] **6.3.3 增强 `ChatPreparationOrchestrator.decideNavigation()`**：接入 `StructureGraphQueryEngine` 辅助判断结构定位类问题（当前 `decideNavigation` 始终返回 `WHOLE_DOCUMENT`，Phase 8 接入 `DocumentQuestionRouter` 后改为真正的导航决策）
 
 ---
 
-## Phase 7 — Navigation Index 地基：ES 索引 / 记录 / 初始化 / 搜索  `[ ]`
+## Phase 7 — Navigation Index 地基：ES 索引 / 记录 / 初始化 / 搜索  `[x]`
 
 **产出**：ES 导航章节索引 + 搜索服务。在 document 解析管线中构建，在 chat 管线中被 `DocumentQuestionRouter` 消费。对标 super-agent `DocumentNavigationIndexService` + `ElasticsearchDocumentNavigationIndexService` + `DocumentNavigationIndexRecord` + `DocumentNavigationElasticsearchIndexInitializer`。
 
 ### 7.1 索引记录模型
 
-- [ ] **7.1.1 `DocumentNavigationIndexRecord`**（`model/es/`）：
+- [x] **7.1.1 `DocumentNavigationIndexRecord`**（`model/es/`）：
   - `nodeId(Long)` / `documentId(Long)` / `parseTaskId(Long)` / `nodeType(String)` / `nodeCode(String)` / `nodeNo(Integer)` / `depth(Integer)` / `parentNodeId(Long)` / `title(String)` / `anchorText(String)` / `sectionPath(String)` / `canonicalPath(String)` / `contentText(String)` / `itemIndex(Integer)`
   - `@Builder`，用于 ES bulk 写入
 
 ### 7.2 ES 索引初始化
 
-- [ ] **7.2.1 `DocumentNavigationElasticsearchIndexInitializer`**（`config/`）：
+- [x] **7.2.1 `DocumentNavigationElasticsearchIndexInitializer`**（`config/`）：
   - `@PostConstruct` 检查 + 创建索引 `reuben_agent_document_navigation`
   - 字段映射：`nodeId`/`documentId`/`parseTaskId`/`parentNodeId` → `long`；`nodeNo`/`depth`/`itemIndex` → `integer`；`nodeType`/`nodeCode` → `keyword`；`canonicalPath` → `keyword`；`title`/`anchorText`/`sectionPath`/`contentText` → `text`（analyzer=来自配置，默认 `ik_max_word`；searchAnalyzer=默认 `ik_smart`）
   - Analyzer 回退同 Phase 1
@@ -565,14 +565,14 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 7.3 导航索引服务
 
-- [ ] **7.3.1 `DocumentNavigationIndexService` 接口**（`service/`）：
+- [x] **7.3.1 `DocumentNavigationIndexService` 接口**（`service/`）：
   - `void reindexDocumentNodes(Long documentId, Long parseTaskId, List<DocumentStructureNode> nodes)` — 删除旧索引 → bulk 写入新节点
   - `void deleteByDocumentId(Long documentId)` — 按文档删除
   - `List<NavigationSectionHit> searchSections(Long documentId, String topic, String facet, String informationNeed, String question, int size)` — 四维章节搜索
 
-- [ ] **7.3.2 `NavigationSectionHit` 记录**：`nodeId` / `nodeCode` / `title` / `sectionPath` / `canonicalPath` / `score(double)`
+- [x] **7.3.2 `NavigationSectionHit` 记录**：`nodeId` / `nodeCode` / `title` / `sectionPath` / `canonicalPath` / `score(double)`
 
-- [ ] **7.3.3 `EsDocumentNavigationIndexService`**（`service/impl/`）：
+- [x] **7.3.3 `EsDocumentNavigationIndexService`**（`service/impl/`）：
   - `@ConditionalOnProperty(prefix="reuben.document.elasticsearch", name="enabled", havingValue="true", matchIfMissing=true)`
   - **`reindexDocumentNodes()`**：`deleteByQuery(term(documentId))` → `toIndexRecord(node)` 转换 → `bulkIndex(Refresh.WaitFor)`。只索引 `nodeType=SECTION` 的节点（step/list_item 不索引入导航索引）
   - **`deleteByDocumentId()`**：`deleteByQuery(term(documentId))`
@@ -582,8 +582,8 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ### 7.4 接入 document 解析管线
 
-- [ ] **7.4.1 在 `DocumentAsyncProcessServiceImpl`（或等效的索引构建完成回调）中**：`DocumentStructureNode` 持久化后 → `ObjectProvider<DocumentNavigationIndexService>.getIfAvailable()` → `reindexDocumentNodes(documentId, parseTaskId, nodes)`
-- [ ] **7.4.2 文档删除时**：`DocumentManageServiceImpl.deleteDocument()` → `documentNavigationIndexService.deleteByDocumentId(documentId)`
+- [x] **7.4.1 在 `DocumentAsyncProcessServiceImpl`（或等效的索引构建完成回调）中**：`DocumentStructureNode` 持久化后 → `ObjectProvider<DocumentNavigationIndexService>.getIfAvailable()` → `reindexDocumentNodes(documentId, parseTaskId, nodes)`
+- [x] **7.4.2 文档删除时**：`DocumentManageServiceImpl.deleteDocument()` → `documentNavigationIndexService.deleteByDocumentId(documentId)`
 
 ---
 

@@ -108,6 +108,12 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
     private final IDocumentProfileMapper documentProfileMapper;
 
     private final ObjectProvider<DocumentKafkaProducer> kafkaProducerProvider;
+    /** Neo4j 图投影（可选） */
+    private final ObjectProvider<com.reubenagent.document.service.DocumentStructureGraphProjectionService> graphProjectionProvider;
+    /** 导航 ES 索引（可选） */
+    private final ObjectProvider<com.reubenagent.document.service.DocumentNavigationIndexService> navigationIndexProvider;
+    /** 知识路由 ES 索引（可选） */
+    private final ObjectProvider<com.reubenagent.document.service.KnowledgeRouteIndexService> knowledgeRouteIndexProvider;
 
     // =====================================================================
     // 写入：上传 / 策略确认 / 索引构建 / 删除
@@ -388,6 +394,9 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
             log.warn("ES 清理失败 documentId={}", documentId, e);
         }
 
+        // 级联 3.1：Neo4j 图数据 + 导航/路由 ES 索引（失败不阻断）
+        cleanupStructureGraphAndIndices(documentId);
+
         // 级联 4：DB 事务内软删除所有关联数据
         String documentName = document.getDocumentName();
         transactionTemplate.executeWithoutResult(status -> {
@@ -421,6 +430,37 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
                 .vectorCleaned(vectorCleaned)
                 .keywordCleaned(keywordCleaned)
                 .build();
+    }
+
+    /** 清理文档的结构图与导航/路由索引（失败不阻断删除主流程） */
+    private void cleanupStructureGraphAndIndices(Long documentId) {
+        try {
+            com.reubenagent.document.service.DocumentStructureGraphProjectionService projection =
+                    graphProjectionProvider.getIfAvailable();
+            if (projection != null) {
+                projection.deleteByDocumentId(documentId);
+            }
+        } catch (Exception e) {
+            log.warn("Neo4j 图清理失败 documentId={}", documentId, e);
+        }
+        try {
+            com.reubenagent.document.service.DocumentNavigationIndexService navigation =
+                    navigationIndexProvider.getIfAvailable();
+            if (navigation != null) {
+                navigation.deleteByDocumentId(documentId);
+            }
+        } catch (Exception e) {
+            log.warn("导航索引清理失败 documentId={}", documentId, e);
+        }
+        try {
+            com.reubenagent.document.service.KnowledgeRouteIndexService routeIndex =
+                    knowledgeRouteIndexProvider.getIfAvailable();
+            if (routeIndex != null) {
+                routeIndex.deleteDocumentRoute(documentId);
+            }
+        } catch (Exception e) {
+            log.warn("知识路由索引清理失败 documentId={}", documentId, e);
+        }
     }
 
     // =====================================================================

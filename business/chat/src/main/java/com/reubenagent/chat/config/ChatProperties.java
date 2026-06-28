@@ -3,6 +3,9 @@ package com.reubenagent.chat.config;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * 对话模块统一配置属性，绑定 {@code reuben.chat} 前缀。
  *
@@ -27,6 +30,7 @@ public class ChatProperties {
     private Lease lease = new Lease();
     private Rewrite rewrite = new Rewrite();
     private Orchestration orchestration = new Orchestration();
+    private Navigation navigation = new Navigation();
 
     // ============ Agent ============
 
@@ -177,5 +181,39 @@ public class ChatProperties {
         private Double clarifyTopScoreDiff = 0.001;
         /** 检索 topK 用于候选文档评分 */
         private Integer routeCandidateTopK = 5;
+    }
+
+    // ============ Navigation（结构导航 / 图查询）============
+
+    @Data
+    public static class Navigation {
+        /** GRAPH_ONLY 大文档压缩摘要的节点数阈值，超过则调用 LLM 压缩 */
+        private Integer structureSummaryNodeThreshold = 50;
+        /** GRAPH_ONLY 结构摘要最大展示节点数 */
+        private Integer structureSummaryMaxNodes = 50;
+        /** 章节定位本地评分阈值，低于此分视为未定位 */
+        private Double sectionMatchThreshold = 45.0;
+        /** 章节定位时 sectionPath 命中加分 */
+        private Double sectionPathScore = 100.0;
+        /** 章节定位时 title 命中加分 */
+        private Double titleScore = 90.0;
+        /** 章节定位时 anchorText 命中加分 */
+        private Double anchorTextScore = 80.0;
+        /** 章节定位时 contentText 命中加分 */
+        private Double contentTextScore = 45.0;
+        /** 邻接查询关键词（上一节/下一节/属于哪个章节 等） */
+        private List<String> adjacencyHints = new ArrayList<>(List.of(
+                "上一节", "下一节", "前一节", "后一节", "上一章", "下一章",
+                "属于哪个章节", "章节位置", "前一个", "后一个", "上一个", "下一个"));
+        /** 大纲查询关键词（包含哪些章节/目录 等） */
+        private List<String> outlineHints = new ArrayList<>(List.of(
+                "包含哪些章节", "有哪些章节", "有哪些小节", "章节列表", "目录",
+                "子章节", "子小节", "下级章节", "展开目录", "列出目录"));
+        /** 条目查询关键词（哪一步/第几步 等） */
+        private List<String> itemHints = new ArrayList<>(List.of(
+                "哪一步", "哪一项", "第几步", "第几项", "具体步骤", "步骤中的"));
+        /** 结构对象关键词（章节/小节/这章 等） */
+        private List<String> structureObjectHints = new ArrayList<>(List.of(
+                "章节", "小节", "这章", "这节", "这部分", "标题", "目录", "模块", "节点"));
     }
 }

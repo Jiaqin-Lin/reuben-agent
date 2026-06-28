@@ -47,17 +47,22 @@ import com.reubenagent.document.service.IDocumentStorageService;
 import com.reubenagent.document.service.IDocumentStrategyService;
 import com.reubenagent.document.service.IDocumentStructureNodeService;
 import com.reubenagent.document.service.IDocumentVectorGateway;
+import com.reubenagent.document.service.DocumentNavigationIndexService;
+import com.reubenagent.document.service.DocumentStructureGraphProjectionService;
 import com.reubenagent.document.service.keyword.IDocumentKeywordSearchGateway;
 import com.reubenagent.framework.uid.UidGenerator;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * 文档异步处理 —— 编排 document/task/taskLog 三表状态流转。
@@ -88,6 +93,11 @@ public class DocumentAsyncProcessServiceImpl implements IDocumentAsyncProcessSer
     private final IDocumentKeywordSearchGateway keywordSearchGateway;
 
     private final UidGenerator uidGenerator;
+
+    /** Neo4j 图投影（可选，enabled=false 时不创建 Bean） */
+    private final ObjectProvider<DocumentStructureGraphProjectionService> graphProjectionProvider;
+    /** 导航章节 ES 索引（可选，ES 不可用时不创建 Bean） */
+    private final ObjectProvider<DocumentNavigationIndexService> navigationIndexProvider;
 
     @Override
     public void handleParseStrategyRoute(Long documentId, Long taskId) {
@@ -147,6 +157,9 @@ public class DocumentAsyncProcessServiceImpl implements IDocumentAsyncProcessSer
             // 阶段 4：结构节点持久化
             structureNodes = structureNodeService.saveNodes(
                     documentId, taskId, parseResult.getStructureNodes());
+
+            // 阶段 4.5：结构索引副产物（Neo4j 图投影 + 导航 ES 索引，异步、失败不阻塞主解析）
+            indexStructureArtifacts(documentId, taskId, structureNodes);
 
             // 阶段 5：生成文档画像
             documentProfileService.generateProfile(documentId, parseResult, structureNodes);
@@ -573,6 +586,35 @@ public class DocumentAsyncProcessServiceImpl implements IDocumentAsyncProcessSer
                         "structureNodeCount", nodeCount,
                         "costMillis", costMillis)))
                 .build());
+    }
+
+    /** 结构索引副产物：Neo4j 图投影 + 导航 ES 索引，异步执行，失败仅 warn 不阻断解析主流程 */
+    private void indexStructureArtifacts(Long documentId, Long parseTaskId,
+                                         List<DocumentStructureNode> structureNodes) {
+        if (structureNodes == null || structureNodes.isEmpty()) {
+            return;
+        }
+        DocumentStructureNode[] nodesRef = structureNodes.toArray(new DocumentStructureNode[0]);
+        CompletableFuture.runAsync(() -> {
+            try {
+                DocumentStructureGraphProjectionService projection = graphProjectionProvider.getIfAvailable();
+                if (projection != null) {
+                    projection.projectToGraph(documentId, parseTaskId);
+                }
+            } catch (Exception e) {
+                log.warn("Neo4j 图投影失败，不影响解析主流程: documentId={} err={}",
+                        documentId, e.getMessage());
+            }
+            try {
+                DocumentNavigationIndexService navigation = navigationIndexProvider.getIfAvailable();
+                if (navigation != null) {
+                    navigation.reindexDocumentNodes(documentId, parseTaskId, Arrays.asList(nodesRef));
+                }
+            } catch (Exception e) {
+                log.warn("导航索引构建失败，不影响解析主流程: documentId={} err={}",
+                        documentId, e.getMessage());
+            }
+        });
     }
 
     private void finishParseSuccess(Document document, DocumentTask task, DocumentParseResult parseResult,

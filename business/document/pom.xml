@@ -47,6 +47,12 @@
             <artifactId>elasticsearch-java</artifactId>
         </dependency>
 
+        <!-- Neo4j Driver（原生 Driver + Cypher，不引入 spring-boot-starter-data-neo4j） -->
+        <dependency>
+            <groupId>org.neo4j.driver</groupId>
+            <artifactId>neo4j-java-driver</artifactId>
+        </dependency>
+
         <!-- PostgreSQL + pgvector -->
         <dependency>
             <groupId>org.postgresql</groupId>

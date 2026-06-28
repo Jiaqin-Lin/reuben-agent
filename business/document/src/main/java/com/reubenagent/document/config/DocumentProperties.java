@@ -31,6 +31,8 @@ public class DocumentProperties {
 
     private KnowledgeRoute knowledgeRoute = new KnowledgeRoute();
 
+    private Neo4j neo4j = new Neo4j();
+
     // ============ 内部类 — 按中间件/功能拆分 ============
 
     @Data
@@ -204,5 +206,33 @@ public class DocumentProperties {
         private int tokenMinLength = 2;
         /** 分词最大数量 */
         private int tokenMaxCount = 40;
+    }
+
+    /**
+     * Neo4j 图数据库配置，绑定 {@code reuben.document.neo4j}。
+     *
+     * <p>默认关闭，需要图查询能力时手动开启。与 {@code spring.neo4j} 解耦，
+     * 使用独立 Driver Bean，不走 Spring Boot 自动配置。</p>
+     */
+    @Data
+    public static class Neo4j {
+        /** Neo4j 总开关（默认关闭，大多数部署不需要图数据库） */
+        private boolean enabled = false;
+        /** Bolt 连接地址 */
+        private String uri = "bolt://127.0.0.1:7687";
+        /** 用户名 */
+        private String username = "neo4j";
+        /** 密码 */
+        private String password = "neo4j";
+        /** 数据库名 */
+        private String database = "neo4j";
+        /** 单次查询超时（秒） */
+        private int queryTimeoutSeconds = 5;
+        /** 连接池最大连接数 */
+        private int maxConnectionPoolSize = 10;
+        /** 获取连接超时（毫秒） */
+        private long connectionAcquisitionTimeoutMs = 5000;
+        /** 单文档图查询的内存缓存上限（节点数超过此值则不缓存，每次直查） */
+        private int cacheNodeThreshold = 2000;
     }
 }
