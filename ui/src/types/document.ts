@@ -105,3 +105,36 @@ export interface StoredDocument {
   documentName: string;
   uploadedAt: string;
 }
+
+/** 文档分页列表查询入参 */
+export interface DocumentPageQuery {
+  pageNo?: number;
+  pageSize?: number;
+  keyword?: string;
+}
+
+/** 文档列表项（含知识路由元数据） */
+export interface DocumentListItemVo {
+  documentId: string;
+  documentName: string;
+  originalFileName?: string;
+  fileType: number;
+  fileSize?: number;
+  charCount?: number;
+  tokenCount?: number;
+  parseStatus: number;
+  strategyStatus: number;
+  indexStatus: number;
+  parseErrorMsg?: string;
+  knowledgeScopeCode?: string;
+  knowledgeScopeName?: string;
+  businessCategory?: string;
+  documentTags?: string;
+  currentPlanId?: string;
+  latestIndexTaskId?: string;
+  latestTaskId?: string;
+  latestTaskType?: number;
+  latestTaskStatus?: number;
+  createTime?: string;
+  updateTime?: string;
+}

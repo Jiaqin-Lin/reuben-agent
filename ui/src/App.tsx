@@ -13,6 +13,11 @@ import {
   AdminDocumentsPage,
   AdminDocumentDetailPage,
 } from './pages/admin/AdminDocumentsPage';
+import { AdminKnowledgeRoutePage } from './pages/admin/AdminKnowledgeRoutePage';
+import { AdminKnowledgeRouteTracePage } from './pages/admin/AdminKnowledgeRouteTracePage';
+import { AdminObservabilityListPage } from './pages/admin/AdminObservabilityListPage';
+import { AdminObservabilitySessionPage } from './pages/admin/AdminObservabilitySessionPage';
+import { AdminObservabilityExchangePage } from './pages/admin/AdminObservabilityExchangePage';
 
 export function App() {
   const location = useLocation();
@@ -37,9 +42,14 @@ export function App() {
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="documents" element={<AdminDocumentsPage />} />
           <Route path="documents/:id" element={<AdminDocumentDetailPage />} />
-          <Route path="knowledge-route" element={<PlaceholderPage label="知识路由" title="知识路由" />} />
-          <Route path="knowledge-route/traces" element={<PlaceholderPage label="路由追踪" title="路由追踪" />} />
-          <Route path="observability" element={<PlaceholderPage label="对话观测" title="对话观测" />} />
+          <Route path="knowledge-route" element={<AdminKnowledgeRoutePage />} />
+          <Route path="knowledge-route/traces" element={<AdminKnowledgeRouteTracePage />} />
+          <Route path="observability" element={<AdminObservabilityListPage />} />
+          <Route path="observability/:conversationId" element={<AdminObservabilitySessionPage />} />
+          <Route
+            path="observability/:conversationId/exchanges/:exchangeId"
+            element={<AdminObservabilityExchangePage />}
+          />
         </Route>
         <Route path="/admin/*" element={<Navigate to="/admin/dashboard" replace />} />
       </Routes>

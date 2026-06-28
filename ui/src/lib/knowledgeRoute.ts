@@ -78,6 +78,11 @@ export function formatRouteMode(value?: string): string {
 }
 
 export interface NormalizedRouteTrace {
+  id: number;
+  conversationId: string;
+  exchangeId: number | string;
+  question: string;
+  rewriteQuestion: string;
   mode: string;
   modeLabel: string;
   scopes: (RouteCandidate & { scoreNumber: number | null; scoreText: string })[];
@@ -118,6 +123,11 @@ export function normalizeRouteTrace(record: KnowledgeRouteTraceItemVo = {} as Kn
   const mode = asString(record.mode);
 
   return {
+    id: record.id ?? 0,
+    conversationId: asString(record.conversationId),
+    exchangeId: record.turnId ?? '',
+    question: asString(record.question),
+    rewriteQuestion: asString(record.rewriteQuestion),
     mode,
     modeLabel: formatRouteMode(mode),
     scopes,
@@ -141,6 +151,122 @@ export function normalizeRouteTrace(record: KnowledgeRouteTraceItemVo = {} as Kn
     candidateScopeCount: scopes.length,
     lowConfidenceWidened: mode === 'auto' && confidenceNumber != null && confidenceNumber < 0.8 && documents.length >= 5,
   };
+}
+
+/** 按一组数值求平均，空集合返回 null。 */
+function average(values: number[]): number | null {
+  if (!values.length) return null;
+  return values.reduce((sum, item) => sum + item, 0) / values.length;
+}
+
+export interface RouteTraceSummary {
+  total: number;
+  autoCount: number;
+  shadowCount: number;
+  successCount: number;
+  lowConfidenceCount: number;
+  failedCount: number;
+  highConfidenceCount: number;
+  widenedCount: number;
+  uniqueTopDocumentCount: number;
+  averageConfidenceText: string;
+  averageDocumentCountText: string;
+  averageTopicCountText: string;
+  averageScopeCountText: string;
+  successRateText: string;
+  lowConfidenceRateText: string;
+  shadowHitRateText: string;
+}
+
+export function summarizeRouteTraceRecords(records: KnowledgeRouteTraceItemVo[] = []): RouteTraceSummary {
+  const normalized = records.map(normalizeRouteTrace);
+  const autoCount = normalized.filter((item) => item.mode === 'auto').length;
+  const shadowCount = normalized.filter((item) => item.mode === 'shadow').length;
+  const successCount = normalized.filter((item) => item.statusKey === 'SUCCESS').length;
+  const lowConfidenceCount = normalized.filter((item) => item.statusKey === 'LOW_CONFIDENCE').length;
+  const failedCount = normalized.filter((item) => item.statusKey === 'FAILED').length;
+  const highConfidenceCount = normalized.filter((item) => (item.confidenceNumber ?? 0) >= 0.8).length;
+  const confidenceValues = normalized
+    .map((item) => item.confidenceNumber)
+    .filter((item): item is number => item != null);
+  const averageConfidence = average(confidenceValues);
+  const shadowSamples = normalized.filter((item) => item.mode === 'shadow' && (item.hitTop3 || item.missedTop3));
+  const shadowHitCount = shadowSamples.filter((item) => item.hitTop3).length;
+  const shadowHitRate = shadowSamples.length ? (shadowHitCount / shadowSamples.length) * 100 : null;
+  const widenedCount = normalized.filter((item) => item.lowConfidenceWidened).length;
+  const avgDocumentCount = average(normalized.map((item) => item.candidateDocumentCount));
+  const avgTopicCount = average(normalized.map((item) => item.candidateTopicCount));
+  const avgScopeCount = average(normalized.map((item) => item.candidateScopeCount));
+  const uniqueTopDocuments = new Set(
+    normalized
+      .map((item) => item.topDocument?.documentId || item.topDocument?.documentName || '')
+      .filter(Boolean),
+  );
+  const successRate = normalized.length ? (successCount / normalized.length) * 100 : null;
+  const lowConfidenceRate = normalized.length ? ((lowConfidenceCount + failedCount) / normalized.length) * 100 : null;
+
+  return {
+    total: normalized.length,
+    autoCount,
+    shadowCount,
+    successCount,
+    lowConfidenceCount,
+    failedCount,
+    highConfidenceCount,
+    widenedCount,
+    uniqueTopDocumentCount: uniqueTopDocuments.size,
+    averageConfidenceText: averageConfidence == null ? '-' : averageConfidence.toFixed(4),
+    averageDocumentCountText: avgDocumentCount == null ? '-' : avgDocumentCount.toFixed(1),
+    averageTopicCountText: avgTopicCount == null ? '-' : avgTopicCount.toFixed(1),
+    averageScopeCountText: avgScopeCount == null ? '-' : avgScopeCount.toFixed(1),
+    successRateText: successRate == null ? '-' : `${successRate.toFixed(1)}%`,
+    lowConfidenceRateText: lowConfidenceRate == null ? '-' : `${lowConfidenceRate.toFixed(1)}%`,
+    shadowHitRateText: shadowHitRate == null ? '-' : `${shadowHitRate.toFixed(1)}%`,
+  };
+}
+
+export interface TopDocumentDistribution {
+  documentId: string;
+  documentName: string;
+  count: number;
+  averageConfidenceText: string;
+  lowConfidenceCount: number;
+}
+
+export function buildTopDocumentDistribution(records: KnowledgeRouteTraceItemVo[] = []): TopDocumentDistribution[] {
+  const rows = records
+    .map(normalizeRouteTrace)
+    .filter((item) => item.topDocument)
+    .reduce<Map<string, TopDocumentDistribution & { confidenceTotal: number; confidenceCount: number }>>((map, item) => {
+      const documentId = String(item.topDocument!.documentId || item.topDocument!.documentName || 'unknown');
+      const existing = map.get(documentId) || {
+        documentId,
+        documentName: item.topDocument!.documentName || String(item.topDocument!.documentId) || '未知文档',
+        count: 0,
+        confidenceTotal: 0,
+        confidenceCount: 0,
+        lowConfidenceCount: 0,
+        averageConfidenceText: '-',
+      };
+      existing.count += 1;
+      if (item.confidenceNumber != null) {
+        existing.confidenceTotal += item.confidenceNumber;
+        existing.confidenceCount += 1;
+      }
+      if (item.statusKey !== 'SUCCESS') {
+        existing.lowConfidenceCount += 1;
+      }
+      map.set(documentId, existing);
+      return map;
+    }, new Map());
+
+  return [...rows.values()]
+    .map((item) => ({
+      ...item,
+      averageConfidenceText: item.confidenceCount ? (item.confidenceTotal / item.confidenceCount).toFixed(4) : '-',
+    }))
+    .sort((left, right) => right.count - left.count)
+    .slice(0, 6);
 }
 
 /** 按 exchangeId/turnId 建查找表，auto 优先，时间新优先。 */

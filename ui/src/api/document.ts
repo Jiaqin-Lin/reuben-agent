@@ -6,7 +6,22 @@ import type {
   DocumentStrategyPlanVo,
   DocumentStrategyConfirmVo,
   DocumentStrategyConfirmDto,
+  DocumentPageQuery,
+  DocumentListItemVo,
 } from '../types/document';
+import type { PageVo } from '../types/chat';
+
+/** 文档分页列表（含知识范围、业务分类、标签等路由元数据）。 */
+export function pageQueryDocuments(
+  query: DocumentPageQuery = {},
+): Promise<PageVo<DocumentListItemVo>> {
+  const params: Record<string, string> = {
+    pageNo: String(query.pageNo ?? 1),
+    pageSize: String(query.pageSize ?? 20),
+  };
+  if (query.keyword) params.keyword = query.keyword;
+  return apiGet<PageVo<DocumentListItemVo>>('/document/page', params);
+}
 
 export function uploadDocument(
   file: File,

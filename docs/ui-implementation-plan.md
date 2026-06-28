@@ -165,7 +165,7 @@
 
 ---
 
-### Phase 7 — Admin 知识路由管理
+### Phase 7 — Admin 知识路由管理 ✅
 
 **目标**: Scope / Topic / Profile / Association 的 CRUD 管理界面。
 
@@ -179,9 +179,11 @@
 
 **产物**: `/admin/knowledge-route` + `/admin/knowledge-route/traces` 页面。
 
+> 实现：`AdminKnowledgeRoutePage` 4 Tab（Scope/Topic/Profile/Relation）+ 右侧抽屉表单/详情；`AdminKnowledgeRouteTracePage` 左右双栏（健康指标 + Top 文档分布 + 追踪列表 + 候选详情 inspector）。文档画像走 `/document/page` 拉取含元数据文档列表，关联列表走 `topic/document/list`。`lib/knowledgeOptions.ts` 承载选项映射，`lib/knowledgeRoute.ts` 补齐 `summarizeRouteTraceRecords` / `buildTopDocumentDistribution` / `NormalizedRouteTrace.id/question` 等字段。
+
 ---
 
-### Phase 8 — Admin 可观测性
+### Phase 8 — Admin 可观测性 ✅
 
 **目标**: 会话/轮次级别的全链路观测。
 
@@ -194,6 +196,8 @@
 | 8.5 | Stage Benchmarks | `GET /api/chat/stage/benchmarks` → P50/P90/P99 延迟图表 |
 
 **产物**: `/admin/observability/*` 路由完整。
+
+> 实现：`AdminObservabilityListPage`（筛选 + 分页卡片网格）、`AdminObservabilitySessionPage`（轮次列表 + running 4s 轮询 + Live polling 徽章 + 重建摘要）、`AdminObservabilityExchangePage`（阶段时间线可展开 + 回答 Markdown 预览 + 检索结果/双通道执行双栏 + Stage Benchmarks P50/P90/P99 表格）。`lib/observability.ts` 承载数值型枚举（chatMode/turnStatus/stageState/executionMode/channel）格式化。
 
 ---
 
