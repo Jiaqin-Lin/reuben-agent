@@ -118,6 +118,38 @@ reuben:
       embedding-model: bge-m3
     elasticsearch:
       index-name: reuben_document_chunk
+      route-index-name: reuben_agent_knowledge_route
+      navigation-index-name: reuben_agent_document_navigation
+    neo4j:
+      # 默认关闭，需要图查询时手动开启
+      enabled: false
+      uri: bolt://127.0.0.1:7687
+      username: neo4j
+      password: ${NEO4J_PASSWORD:neo4j123}
+      database: neo4j
+      query-timeout-seconds: 5
+      max-connection-pool-size: 10
+      connection-acquisition-timeout-ms: 5000
+      cache-node-threshold: 2000
+    knowledge-route:
+      enabled: true
+      semantic-floor: 0.20
+      semantic-weight: 50.0
+      lexical-cap: 10.0
+      lexical-weight: 1.6
+      entity-hit-score: 6.0
+      scope-boost-topic: 8.0
+      scope-boost-document: 15.0
+      relation-score-weight: 20.0
+      confidence-normalizer-base: 10.0
+      confidence-normalizer-offset: 5.0
+      low-confidence-threshold: 0.55
+      batch-embedding-size: 10
+      max-scope-candidates: 5
+      max-topic-candidates: 8
+      max-document-candidates: 5
+      token-min-length: 2
+      token-max-count: 40
     kafka:
       parse-topic: reuben-agent-document-parse-route
       index-topic: reuben-agent-document-index-build
@@ -240,6 +272,17 @@ reuben:
       clarifyConfidenceThreshold: 0.45
       clarifyTopScoreDiff: 0.001
       routeCandidateTopK: 5
+    navigation:
+      structureSummaryNodeThreshold: 50
+      structureSummaryMaxNodes: 50
+      sectionMatchThreshold: 45.0
+      sectionPathScore: 100.0
+      titleScore: 90.0
+      anchorTextScore: 80.0
+      contentTextScore: 45.0
+      llmIntentConfidenceThreshold: 0.75
+      llmIntentTemperature: 0.0
+      llmIntentTemplate: document-graph-only-intent
     pricing:
       perKTokenCost: {}
 

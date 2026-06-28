@@ -7,13 +7,14 @@ import com.reubenagent.chat.enums.ExecutionMode;
 import com.reubenagent.chat.model.memory.ChatMemoryContext;
 import com.reubenagent.chat.model.orchestrate.ChatRewriteResult;
 import com.reubenagent.chat.model.orchestrate.ConversationExecutionPlan;
-import com.reubenagent.chat.model.orchestrate.DocumentNavigationAction;
 import com.reubenagent.chat.model.orchestrate.DocumentNavigationDecision;
-import com.reubenagent.chat.model.orchestrate.NavigationScopeMode;
 import com.reubenagent.chat.service.IChatMemoryService;
 import com.reubenagent.chat.service.ChatDocumentOptionService;
 import com.reubenagent.chat.support.ChatIntentHints;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
+import com.reubenagent.document.model.route.DocumentRouteCandidate;
+import com.reubenagent.document.model.route.KnowledgeRouteDecision;
+import com.reubenagent.document.service.KnowledgeRouteService;
 import com.reubenagent.document.vo.KnowledgeDocumentOptionVo;
 import com.reubenagent.rag.dto.RagRetrieveRequest;
 import com.reubenagent.rag.model.RetrievalResult;
@@ -21,6 +22,7 @@ import com.reubenagent.rag.service.IRagRetrievalService;
 import com.reubenagent.rag.vo.RagRetrieveResponse;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -60,6 +62,8 @@ public class ChatPreparationOrchestrator {
     private final IRagRetrievalService ragRetrievalService;
     private final ChatProperties properties;
     private final ChatDocumentOptionService documentOptionService;
+    private final DocumentQuestionRouter documentQuestionRouter;
+    private final ObjectProvider<KnowledgeRouteService> knowledgeRouteServiceProvider;
 
     /**
      * 准备一轮对话的执行计划。
@@ -146,6 +150,8 @@ public class ChatPreparationOrchestrator {
                 if (plan.getSelectedDocumentId() == null) {
                     return ModeBranch.clarification(plan, "请选择一个文档后再提问。", List.of(), "DOCUMENT 缺少文档ID");
                 }
+                // 用户已选文档：影子评估知识路由（不干预选择，仅落 trace 比对）
+                recordShadowRoute(plan, rewrite, traceRecorder, plan.getSelectedDocumentId());
                 DocumentNavigationDecision nav = decideNavigation(plan.getSelectedDocumentId(), rewrite, traceRecorder);
                 return ModeBranch.of(nav.toExecutionMode(), plan.getSelectedDocumentId(),
                         plan.getSelectedDocumentName(), nav);
@@ -158,7 +164,8 @@ public class ChatPreparationOrchestrator {
 
     private ModeBranch resolveAutoDocument(StreamLaunchPlan plan, ChatRewriteResult rewrite,
                                            ChatTraceRecorder traceRecorder) {
-        RouteCandidate candidate = routeKnowledge(rewrite.getRewrittenQuery(), traceRecorder);
+        // 阶段：知识路由（scope → topic → document），低置信度 / 模糊 → CLARIFICATION
+        RouteCandidate candidate = routeKnowledge(rewrite.getRewrittenQuery(), plan, rewrite, traceRecorder);
         if (candidate == null || candidate.documentId == null) {
             return ModeBranch.clarification(plan,
                     "没有找到与问题匹配的文档，请补充文档信息或选择开放式对话。",
@@ -174,21 +181,51 @@ public class ChatPreparationOrchestrator {
                     List.of(candidate.documentName == null ? String.valueOf(candidate.documentId) : candidate.documentName),
                     reason);
         }
+        // 路由命中：落 AUTO 路由 trace（携带完整 KnowledgeRouteDecision）
+        recordAutoRoute(plan, rewrite, traceRecorder, candidate);
         DocumentNavigationDecision nav = decideNavigation(candidate.documentId, rewrite, traceRecorder);
         return ModeBranch.of(nav.toExecutionMode(), candidate.documentId, candidate.documentName, nav)
                 .withRoute(candidate.topScore, candidate.secondScore, candidate.confidence);
     }
 
     /**
-     * 知识路由 —— 委托 {@link IRagRetrievalService} 做候选文档评分。
+     * 知识路由 —— 优先委托 {@link KnowledgeRouteService} 三级路由（scope → topic → document）。
      *
-     * <p>不带 documentId filter 检索 → 按 documentId 聚合 top1/top2 分数 → 取分数最高文档作为候选。
-     * 不复制 super-agent 的手搓 n-gram 评分逻辑。</p>
+     * <p>路由服务不可用时回退到 RAG 检索聚合评分（修正 super-agent：不强依赖单一通道）。</p>
      */
-    private RouteCandidate routeKnowledge(String query, ChatTraceRecorder traceRecorder) {
+    private RouteCandidate routeKnowledge(String query, StreamLaunchPlan plan, ChatRewriteResult rewrite,
+                                          ChatTraceRecorder traceRecorder) {
         if (query == null || query.isBlank()) {
             return null;
         }
+        KnowledgeRouteService routeService = knowledgeRouteServiceProvider.getIfAvailable();
+        if (routeService != null) {
+            try {
+                KnowledgeRouteDecision decision = routeService.route(plan.getQuestion(), query);
+                if (decision != null) {
+                    DocumentRouteCandidate top = decision.topDocument();
+                    if (top != null && top.getDocumentId() != null) {
+                        double confidence = decision.getConfidence() == null ? 0.0
+                                : decision.getConfidence().doubleValue();
+                        double secondScore = 0.0;
+                        if (decision.getDocuments() != null && decision.getDocuments().size() > 1) {
+                            secondScore = decision.getDocuments().get(1).getScore() == null ? 0.0
+                                    : decision.getDocuments().get(1).getScore().doubleValue();
+                        }
+                        return new RouteCandidate(top.getDocumentId(), top.getDocumentName(),
+                                top.getScore() == null ? 0.0 : top.getScore().doubleValue(),
+                                secondScore, confidence, decision);
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("知识路由服务调用失败，回退 RAG 聚合评分 → err={}", e.getMessage());
+            }
+        }
+        return routeKnowledgeByRag(query, traceRecorder);
+    }
+
+    /** RAG 聚合评分回退：不带 documentId filter 检索 → 按 documentId 聚合 top1/top2 分数。 */
+    private RouteCandidate routeKnowledgeByRag(String query, ChatTraceRecorder traceRecorder) {
         try {
             RagRetrieveRequest req = RagRetrieveRequest.builder()
                     .query(query)
@@ -218,9 +255,9 @@ public class ChatPreparationOrchestrator {
                     ? ranked.get(1).getValue().stream().max(Double::compare).orElse(0.0)
                     : 0.0;
             double confidence = ranked.size() == 1 ? 1.0 : topScore / (topScore + secondScore + 1e-6);
-            return new RouteCandidate(top.getKey(), docNames.get(top.getKey()), topScore, secondScore, confidence);
+            return new RouteCandidate(top.getKey(), docNames.get(top.getKey()), topScore, secondScore, confidence, null);
         } catch (Exception e) {
-            log.warn("知识路由失败，跳过 AUTO_DOCUMENT 候选评分 → err={}", e.getMessage());
+            log.warn("知识路由 RAG 回退失败，跳过 AUTO_DOCUMENT 候选评分 → err={}", e.getMessage());
             return null;
         }
     }
@@ -246,26 +283,56 @@ public class ChatPreparationOrchestrator {
         return names;
     }
 
+    /** DOCUMENT 模式影子路由：用户已选文档，仅落 SHADOW trace 比对路由推荐，不干预选择。 */
+    private void recordShadowRoute(StreamLaunchPlan plan, ChatRewriteResult rewrite,
+                                   ChatTraceRecorder traceRecorder, Long selectedDocumentId) {
+        KnowledgeRouteService routeService = knowledgeRouteServiceProvider.getIfAvailable();
+        if (routeService == null || traceRecorder == null) {
+            return;
+        }
+        try {
+            routeService.recordShadowRoute(
+                    plan.getConversationId(),
+                    traceRecorder.getTurnId(),
+                    selectedDocumentId,
+                    plan.getQuestion(),
+                    rewrite == null ? null : rewrite.getRewrittenQuery());
+        } catch (Exception e) {
+            log.warn("影子路由 trace 落库失败，不中断主流程 → conversationId={} err={}",
+                    plan.getConversationId(), e.getMessage());
+        }
+    }
+
+    /** AUTO_DOCUMENT 模式自动路由：落 AUTO trace（携带完整 KnowledgeRouteDecision）。 */
+    private void recordAutoRoute(StreamLaunchPlan plan, ChatRewriteResult rewrite,
+                                 ChatTraceRecorder traceRecorder, RouteCandidate candidate) {
+        KnowledgeRouteService routeService = knowledgeRouteServiceProvider.getIfAvailable();
+        if (routeService == null || traceRecorder == null || candidate.decision() == null) {
+            return;
+        }
+        try {
+            routeService.recordAutoRoute(
+                    plan.getConversationId(),
+                    traceRecorder.getTurnId(),
+                    plan.getQuestion(),
+                    rewrite == null ? null : rewrite.getRewrittenQuery(),
+                    candidate.decision());
+        } catch (Exception e) {
+            log.warn("自动路由 trace 落库失败，不中断主流程 → conversationId={} err={}",
+                    plan.getConversationId(), e.getMessage());
+        }
+    }
+
+    /**
+     * 导航决策 —— 委托 {@link DocumentQuestionRouter} 做规则 + LLM 双引擎判定。
+     *
+     * <p>替换原 WHOLE_DOCUMENT 占位逻辑，产出完整 DocumentNavigationDecision
+     * （action + executionMode + structureAnchor + itemAnchor + retrievalPlan）。</p>
+     */
     private DocumentNavigationDecision decideNavigation(Long documentId, ChatRewriteResult rewrite,
                                                         ChatTraceRecorder traceRecorder) {
-        String q = rewrite == null ? "" : rewrite.getRewrittenQuery();
-        // 阶段：纯结构摘要问（"目录结构/有哪些章节"）→ GRAPH_ONLY，只展示结构不检索证据
-        if (ChatIntentHints.matchesGraphOnly(q)) {
-            return DocumentNavigationDecision.builder()
-                    .action(DocumentNavigationAction.GRAPH_ONLY)
-                    .scopeMode(NavigationScopeMode.WHOLE_DOCUMENT)
-                    .reason("问题为纯结构摘要类")
-                    .build();
-        }
-        boolean structureHint = ChatIntentHints.matchesStructure(q);
-        DocumentNavigationAction action = structureHint
-                ? DocumentNavigationAction.LOCATE_THEN_RETRIEVE
-                : DocumentNavigationAction.DIRECT_RETRIEVAL;
-        return DocumentNavigationDecision.builder()
-                .action(action)
-                .scopeMode(NavigationScopeMode.WHOLE_DOCUMENT)
-                .reason(structureHint ? "问题含结构定位词" : "直接证据检索")
-                .build();
+        return documentQuestionRouter.route(documentId,
+                rewrite == null ? null : rewrite.getRewrittenQuery(), rewrite);
     }
 
     private ConversationExecutionPlan buildPlan(StreamLaunchPlan plan, ChatMemoryContext memory,
@@ -335,6 +402,8 @@ public class ChatPreparationOrchestrator {
         }
     }
 
-    private record RouteCandidate(Long documentId, String documentName, double topScore, double secondScore, double confidence) {
+    private record RouteCandidate(Long documentId, String documentName, double topScore,
+                                  double secondScore, double confidence,
+                                  KnowledgeRouteDecision decision) {
     }
 }

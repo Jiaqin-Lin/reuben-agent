@@ -587,7 +587,7 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 ---
 
-## Phase 8 — Document Question Router  `[ ]`
+## Phase 8 — Document Question Router  `[x]`
 
 **产出**：规则+LLM 双引擎导航决策路由。对标 super-agent `DocumentQuestionRouter`（全动作：SECTION_ADJACENCY_LOOKUP / CHILD_SECTION_DESCEND / ITEM_REFERENCE / FRESH_TOPIC / TOPIC_CONTINUE / SIBLING_SECTION_SWITCH / ANCESTOR_SECTION_RETURN）。
 
@@ -595,16 +595,16 @@ reuben-agent 已有 DDL（`sql/reuben_agent_mysql.sql`），需对照 super-agen
 
 reuben-agent chat 已有 `DocumentNavigationAction` / `NavigationScopeMode` / `DocumentNavigationDecision` / `ConversationExecutionPlan`。需增强：
 
-- [ ] **8.1.1 `DocumentNavigationAction` 补全枚举值**：
+- [x] **8.1.1 `DocumentNavigationAction` 补全枚举值**：
   - 保留：`DIRECT_RETRIEVAL`(1) / `LOCATE_THEN_RETRIEVE`(2) / `GRAPH_ONLY`(3)
   - 新增：`TOPIC_CONTINUE`(4) / `TOPIC_SWITCH`(5) / `FRESH_TOPIC`(6) / `SIBLING_SECTION_SWITCH`(7) / `CHILD_SECTION_DESCEND`(8) / `ANCESTOR_SECTION_RETURN`(9) / `ITEM_REFERENCE`(10) / `SECTION_ADJACENCY_LOOKUP`(11)
   - `toExecutionMode()` 更新映射：`GRAPH_ONLY/SECTION_ADJACENCY_LOOKUP/CHILD_SECTION_DESCEND/SIBLING_SECTION_SWITCH/ANCESTOR_SECTION_RETURN` → `GRAPH_ONLY`；`ITEM_REFERENCE/LOCATE_THEN_RETRIEVE` → `GRAPH_THEN_EVIDENCE`；其余 → `RETRIEVAL`
 
-- [ ] **8.1.2 `NavigationScopeMode` 补全枚举值**：
+- [x] **8.1.2 `NavigationScopeMode` 补全枚举值**：
   - 保留：`WHOLE_DOCUMENT`(1) / `SECTION_SCOPE`(2) / `PARENT_BLOCK_SCOPE`(3)
   - 新增：`NONE`(0) / `SOFT`(4) / `HARD_SECTION`(5) / `HARD_ITEM`(6) / `HARD_PARENT_WITH_SIBLINGS`(7)
 
-- [ ] **8.1.3 `DocumentNavigationDecision` 补字段**：
+- [x] **8.1.3 `DocumentNavigationDecision` 补字段**：
   - 已有：`action` / `scopeMode` / `sectionPath` / `parentBlockId` / `reason`
   - 新增：`structureAnchor(ConversationStructureAnchor)` — 含 rootSectionCode/rootSectionTitle/targetSectionHint/structureNodeId/canonicalPath/scopeMode
   - 新增：`itemAnchor(ConversationItemAnchor)` — 含 itemIndex/itemText/structureNodeId/canonicalPath
@@ -612,12 +612,12 @@ reuben-agent chat 已有 `DocumentNavigationAction` / `NavigationScopeMode` / `D
   - 新增：`queryContextHints(List<String>)` — 检索关键词提示
   - 新增：`softSectionHints(List<String>)` — RETRIEVAL 模式的软章节提示
 
-- [ ] **8.1.4 新建 `ConversationStructureAnchor`**（`chat/model/orchestrate/`）：`rootSectionCode` / `rootSectionTitle` / `targetSectionHint` / `structureNodeId` / `canonicalPath` / `scopeMode(String)`
-- [ ] **8.1.5 新建 `ConversationItemAnchor`**（`chat/model/orchestrate/`）：`itemIndex` / `itemText` / `structureNodeId` / `canonicalPath`
+- [x] **8.1.4 新建 `ConversationStructureAnchor`**（`chat/model/orchestrate/`）：`rootSectionCode` / `rootSectionTitle` / `targetSectionHint` / `structureNodeId` / `canonicalPath` / `scopeMode(String)`
+- [x] **8.1.5 新建 `ConversationItemAnchor`**（`chat/model/orchestrate/`）：`itemIndex` / `itemText` / `structureNodeId` / `canonicalPath`
 
 ### 8.2 意图关键词配置
 
-- [ ] **8.2.1 `ChatIntentHints` 补全**（`chat/support/`，或进 `ChatProperties.Navigation`）：
+- [x] **8.2.1 `ChatIntentHints` 补全**（`chat/support/`，或进 `ChatProperties.Navigation`）：
   - `ADJACENCY_HINTS` — 上一节/下一节/前一节/后一节/上一章/下一章/属于哪个章节/章节位置
   - `OUTLINE_HINTS` — 包含哪些章节/有哪些章节/有哪些小节/章节列表/目录
   - `OUTLINE_EXPLICIT_HINTS` — 子章节/子小节/下级章节/展开目录/列出目录
@@ -631,7 +631,7 @@ reuben-agent chat 已有 `DocumentNavigationAction` / `NavigationScopeMode` / `D
 
 ### 8.3 Document Question Router
 
-- [ ] **8.3.1 `DocumentQuestionRouter`**（`chat/orchestrate/`）：
+- [x] **8.3.1 `DocumentQuestionRouter`**（`chat/orchestrate/`）：
   - `@Service @AllArgsConstructor`
   - 依赖：`DocumentStructureGraphService` / `ObjectProvider<DocumentNavigationIndexService>` / `ObservedChatModelService` / `ChatPromptTemplateService` / `ChatProperties`
   - **`route(Long documentId, String originalQuestion, ChatRewriteResult rewriteResult) → DocumentNavigationDecision`**
@@ -663,54 +663,54 @@ reuben-agent chat 已有 `DocumentNavigationAction` / `NavigationScopeMode` / `D
 
 ### 8.4 Prompt 模板
 
-- [ ] **8.4.1 `document-graph-only-intent.st`**（`business/chat/src/main/resources/prompt/`）：
+- [x] **8.4.1 `document-graph-only-intent.st`**（`business/chat/src/main/resources/prompt/`）：
   - System：判断用户问题是否需要纯结构图查询 / 章节邻接查询 / 条目查询 / 证据检索
   - 输出 JSON：`{ "intent_type": "ADJACENCY|OUTLINE|ANALYTIC|ITEM_LOOKUP|CONTENT_QA", "confidence": 0.0-1.0, "action": "SECTION_ADJACENCY_LOOKUP|CHILD_SECTION_DESCEND|ITEM_REFERENCE|FRESH_TOPIC", "graph_only": boolean, "analytic": boolean, "outline": boolean, "item_lookup": boolean, "structure_hint": boolean, "reason": "..." }`
   - 置信度阈值 `0.75` 进配置
 
 ---
 
-## Phase 9 — 全量集成与接线  `[ ]`
+## Phase 9 — 全量集成与接线  `[x]`
 
 **产出**：三模块串入现有 document 解析管线 + chat 编排管线 + 端到端可跑。
 
 ### 9.1 Document 解析管线接入
 
-- [ ] **9.1.1 结构节点持久化后**（`DocumentAsyncProcessServiceImpl` 或等效的 Stage 3/4 完成回调）：
+- [x] **9.1.1 结构节点持久化后**（`DocumentAsyncProcessServiceImpl` 或等效的 Stage 3/4 完成回调）：
   - `Neo4jDocumentStructureGraphProjectionService.projectToGraph(documentId, parseTaskId)`（Neo4j enabled 时）
   - `DocumentNavigationIndexService.reindexDocumentNodes(documentId, parseTaskId, structureNodes)`（ES enabled 时）
   - 两者异步（`@Async` 或 `CompletableFuture.runAsync`），失败不阻塞主解析管线
 
-- [ ] **9.1.2 文档删除时**（`DocumentManageServiceImpl.deleteDocument()`）：
+- [x] **9.1.2 文档删除时**（`DocumentManageServiceImpl.deleteDocument()`）：
   - `Neo4jDocumentStructureGraphProjectionService.deleteByDocumentId(documentId)`
   - `DocumentNavigationIndexService.deleteByDocumentId(documentId)`
   - `KnowledgeRouteIndexService.deleteDocumentRoute(documentId)`
   - `CompositeDocumentStructureGraphService` 缓存失效
 
-- [ ] **9.1.3 Scope/Topic/Relation 变更后**（`KnowledgeManageServiceImpl`）：
+- [x] **9.1.3 Scope/Topic/Relation 变更后**（`KnowledgeManageServiceImpl`）：
   - `KnowledgeRouteIndexService.refreshAll()`（异步，防抖 30s）
 
 ### 9.2 Chat 编排管线接入
 
-- [ ] **9.2.1 `ChatPreparationOrchestrator.modeBranch()` 增强**：
+- [x] **9.2.1 `ChatPreparationOrchestrator.modeBranch()` 增强**：
   - `AUTO_DOCUMENT` 模式：调用 `KnowledgeRouteService.route(question, rewriteQuestion)` → 取 `topDocument()` → 若 低置信度 → CLARIFICATION（生成候选文档列表让用户选）；否则选中文档 → 继续
 
-- [ ] **9.2.2 `ChatPreparationOrchestrator.decideNavigation()` 替换**：
+- [x] **9.2.2 `ChatPreparationOrchestrator.decideNavigation()` 替换**：
   - 当前本地硬编码逻辑 → 替换为 `DocumentQuestionRouter.route(documentId, question, rewriteResult)` → 产完整的 `DocumentNavigationDecision`（action + executionMode + structureAnchor + itemAnchor）
   - 删除当前 `decideNavigation` 中始终返回 `WHOLE_DOCUMENT` 的占位逻辑
 
-- [ ] **9.2.3 `KnowledgeRouteTrace` 写入**：
+- [x] **9.2.3 `KnowledgeRouteTrace` 写入**：
   - DOCUMENT 模式 → `KnowledgeRouteService.recordShadowRoute(conversationId, turnId, selectedDocumentId, question, rewriteQuestion)`
   - AUTO_DOCUMENT 模式 → `KnowledgeRouteService.recordAutoRoute(conversationId, turnId, question, rewriteQuestion, decision)`
 
 ### 9.3 Executor 分发接入
 
-- [ ] **9.3.1 `ConversationExecutorRegistry`** 确认 `SECTION_ADJACENCY_LOOKUP` / `CHILD_SECTION_DESCEND` 等新增 action 对应的 `ExecutionMode` 能正确路由到 `GraphOnlyExecutor` / `GraphThenEvidenceExecutor`
-- [ ] **9.3.2 `GraphOnlyExecutor` / `GraphThenEvidenceExecutor`** 从 `DocumentNavigationDecision.structureAnchor` / `itemAnchor` 读取章节定位信息，通过 `StructureGraphQueryEngine` 查询
+- [x] **9.3.1 `ConversationExecutorRegistry`** 确认 `SECTION_ADJACENCY_LOOKUP` / `CHILD_SECTION_DESCEND` 等新增 action 对应的 `ExecutionMode` 能正确路由到 `GraphOnlyExecutor` / `GraphThenEvidenceExecutor`
+- [x] **9.3.2 `GraphOnlyExecutor` / `GraphThenEvidenceExecutor`** 从 `DocumentNavigationDecision.structureAnchor` / `itemAnchor` 读取章节定位信息，通过 `StructureGraphQueryEngine` 查询
 
 ### 9.4 配置装配
 
-- [ ] **9.4.1 `application.yml`** 补全：
+- [x] **9.4.1 `application.yml`** 补全：
   ```yaml
   reuben:
     document:
@@ -731,7 +731,7 @@ reuben-agent chat 已有 `DocumentNavigationAction` / `NavigationScopeMode` / `D
       navigation:
         # ... 20+ 关键词列表可配置覆盖
   ```
-- [ ] **9.4.2 编译验证**：`mvn compile -pl launcher -am` 通过
+- [x] **9.4.2 编译验证**：`mvn compile -pl launcher -am` 通过
 
 ---
 

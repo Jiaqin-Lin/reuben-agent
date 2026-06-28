@@ -215,5 +215,29 @@ public class ChatProperties {
         /** 结构对象关键词（章节/小节/这章 等） */
         private List<String> structureObjectHints = new ArrayList<>(List.of(
                 "章节", "小节", "这章", "这节", "这部分", "标题", "目录", "模块", "节点"));
+        /** 大纲显式关键词（子章节/下级章节/展开目录 等）—— 比 outlineHints 更强，命中即 CHILD_SECTION_DESCEND */
+        private List<String> outlineExplicitHints = new ArrayList<>(List.of(
+                "子章节", "子小节", "下级章节", "展开目录", "列出目录"));
+        /** 大纲动作关键词（下面/下级/子章节/展开/包含哪些/列出/组成）—— 配合结构对象触发下钻 */
+        private List<String> outlineActionHints = new ArrayList<>(List.of(
+                "下面", "下级", "子章节", "子小节", "展开", "包含哪些", "列出", "组成"));
+        /** 强分析关键词（为什么/原因/影响/区别/对比 等）—— 命中不走 GRAPH_ONLY，倾向证据检索 */
+        private List<String> analyticStrongHints = new ArrayList<>(List.of(
+                "为什么", "原因", "影响", "区别", "对比", "比较", "如何理解", "分析", "解释"));
+        /** 结构关系关键词（前后关系/相邻关系/上下级关系/父子关系/属于哪个章节） */
+        private List<String> structuralRelationHints = new ArrayList<>(List.of(
+                "前后关系", "相邻关系", "上下级关系", "父子关系", "属于哪个章节"));
+        /** GRAPH_ONLY 显式邻接关键词（前一个/后一个/上一个/下一个/相邻/前后/位置） */
+        private List<String> graphOnlyExplicitAdjacencyHints = new ArrayList<>(List.of(
+                "前一个", "后一个", "上一个", "下一个", "前一", "后一", "相邻", "前后", "位置"));
+        /** GRAPH_ONLY 结构对象关键词（章节/小节/这章/这节/这部分/标题/目录/模块/节点） */
+        private List<String> graphOnlyStructureObjectHints = new ArrayList<>(List.of(
+                "章节", "小节", "这章", "这节", "这部分", "标题", "目录", "模块", "节点"));
+        /** LLM 图意图判定置信度阈值，低于此值不采信 LLM 结果，回退规则 */
+        private Double llmIntentConfidenceThreshold = 0.75;
+        /** LLM 图意图判定 temperature（temperature=0.0 保证确定性输出） */
+        private Double llmIntentTemperature = 0.0;
+        /** LLM 图意图 prompt 模板名（classpath:prompt/ 下，不含 .st 后缀） */
+        private String llmIntentTemplate = "document-graph-only-intent";
     }
 }

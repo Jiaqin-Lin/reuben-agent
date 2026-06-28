@@ -88,8 +88,21 @@ public class GraphThenEvidenceExecutor implements ConversationExecutor {
         });
     }
 
-    /** 通过图查询引擎按问题定位最佳章节 nodeId，找不到返回 null */
+    /**
+     * 优先用导航决策已 resolve 的章节锚点（itemAnchor / structureAnchor），
+     * 否则通过图查询引擎按问题定位最佳章节 nodeId，找不到返回 null。
+     */
     private Long locateSection(Long documentId, ConversationExecutionPlan plan) {
+        // 锚点优先：导航决策已 resolve 出精确章节，直接用，避免重复定位
+        if (plan.getNavigationDecision() != null) {
+            var nav = plan.getNavigationDecision();
+            if (nav.getItemAnchor() != null && nav.getItemAnchor().getStructureNodeId() != null) {
+                return nav.getItemAnchor().getStructureNodeId();
+            }
+            if (nav.getStructureAnchor() != null && nav.getStructureAnchor().getStructureNodeId() != null) {
+                return nav.getStructureAnchor().getStructureNodeId();
+            }
+        }
         String query = plan.getRewrittenQuery() != null ? plan.getRewrittenQuery() : plan.getOriginalQuestion();
         if (query == null || query.isBlank()) {
             return null;

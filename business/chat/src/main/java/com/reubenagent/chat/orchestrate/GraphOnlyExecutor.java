@@ -3,6 +3,7 @@ package com.reubenagent.chat.orchestrate;
 import com.reubenagent.chat.config.ChatProperties;
 import com.reubenagent.chat.enums.ChatTraceStageCode;
 import com.reubenagent.chat.enums.ExecutionMode;
+import com.reubenagent.chat.model.orchestrate.ConversationExecutionPlan;
 import com.reubenagent.chat.service.ObservedChatModelService;
 import com.reubenagent.chat.support.ChatStreamEventWriter;
 import com.reubenagent.chat.support.SinkEmitHelper;
@@ -53,17 +54,19 @@ public class GraphOnlyExecutor implements ConversationExecutor {
     @Override
     public Flux<String> execute(ChatTaskInfo taskInfo) {
         return Flux.defer(() -> {
-            Long documentId = taskInfo.getExecutionPlan() == null
-                    ? null : taskInfo.getExecutionPlan().getSelectedDocumentId();
+            ConversationExecutionPlan plan = taskInfo.getExecutionPlan();
+            Long documentId = plan == null ? null : plan.getSelectedDocumentId();
             if (documentId == null) {
                 SinkEmitHelper.emitNext(taskInfo.getSink(),
                         eventWriter.error("GRAPH_ONLY 模式缺少 selectedDocumentId",
                                 taskInfo.getConversationId(), taskInfo.getTurnId()));
                 return Flux.just("未选择文档，无法展示结构。");
             }
-            String question = taskInfo.getExecutionPlan().getOriginalQuestion();
+            String question = plan.getOriginalQuestion();
+            // 优先用导航决策已 resolve 的章节锚点，避免重复定位
+            Long anchorSectionId = resolveAnchorSectionId(plan);
             emitThinking(taskInfo, "正在加载文档结构。");
-            return Mono.fromCallable(() -> renderGraphOnly(documentId, question, taskInfo))
+            return Mono.fromCallable(() -> renderGraphOnly(documentId, question, anchorSectionId, taskInfo))
                     .subscribeOn(Schedulers.boundedElastic())
                     .onErrorMap(Exception.class, e -> {
                         log.warn("文档结构读取失败 → documentId={} err={}", documentId, e.getMessage());
@@ -76,11 +79,26 @@ public class GraphOnlyExecutor implements ConversationExecutor {
         });
     }
 
+    /** 从导航决策的 structureAnchor / itemAnchor 取已定位章节 ID，未定位返回 null。 */
+    private Long resolveAnchorSectionId(ConversationExecutionPlan plan) {
+        if (plan == null || plan.getNavigationDecision() == null) {
+            return null;
+        }
+        var nav = plan.getNavigationDecision();
+        if (nav.getItemAnchor() != null && nav.getItemAnchor().getStructureNodeId() != null) {
+            return nav.getItemAnchor().getStructureNodeId();
+        }
+        if (nav.getStructureAnchor() != null) {
+            return nav.getStructureAnchor().getStructureNodeId();
+        }
+        return null;
+    }
+
     /** GRAPH_ONLY 渲染主逻辑：先尝试邻接/大纲精准渲染，否则全结构摘要（大文档 LLM 压缩）。 */
-    private String renderGraphOnly(Long documentId, String question, ChatTaskInfo taskInfo) {
+    private String renderGraphOnly(Long documentId, String question, Long anchorSectionId, ChatTaskInfo taskInfo) {
         // 邻接查询：按问题里的章节线索定位后渲染兄弟
         if (question != null && answerRenderer.asksAdjacency(question)) {
-            GraphSection best = locateSectionByQuestion(documentId, question);
+            GraphSection best = resolveSectionForRender(documentId, question, anchorSectionId);
             if (best != null) {
                 var siblings = graphQueryEngine.findSectionWithSiblings(documentId, best.getNodeId());
                 if (siblings != null) {
@@ -90,8 +108,8 @@ public class GraphOnlyExecutor implements ConversationExecutor {
         }
         // 大纲查询：渲染目标章节的子章节
         if (question != null && answerRenderer.asksChildren(question)) {
-            GraphSection best = locateSectionByQuestion(documentId, question);
-            Long sectionId = best != null ? best.getNodeId() : null;
+            GraphSection best = resolveSectionForRender(documentId, question, anchorSectionId);
+            Long sectionId = best != null ? best.getNodeId() : anchorSectionId;
             var withChildren = sectionId != null
                     ? graphQueryEngine.findSectionWithChildren(documentId, sectionId)
                     : null;
@@ -102,6 +120,21 @@ public class GraphOnlyExecutor implements ConversationExecutor {
         // 默认：全结构摘要
         List<GraphSection> sections = graphQueryEngine.safeListSections(documentId);
         return renderStructureSummary(sections, documentId, question, taskInfo);
+    }
+
+    /** 优先用锚点章节，否则按问题关键词粗略定位。 */
+    private GraphSection resolveSectionForRender(Long documentId, String question, Long anchorSectionId) {
+        if (anchorSectionId != null) {
+            try {
+                GraphSection s = graphQueryEngine.graphService().findSectionById(documentId, anchorSectionId);
+                if (s != null) {
+                    return s;
+                }
+            } catch (Exception e) {
+                log.warn("锚点章节读取失败 → documentId={} nodeId={} err={}", documentId, anchorSectionId, e.getMessage());
+            }
+        }
+        return locateSectionByQuestion(documentId, question);
     }
 
     /** 在文档章节中按问题关键词粗略定位最佳章节 */
