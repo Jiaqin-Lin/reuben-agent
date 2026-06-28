@@ -97,7 +97,7 @@
 
 ---
 
-### Phase 3 — Chat 高级交互
+### Phase 3 — Chat 高级交互 ✅
 
 **目标**: 对标 super-agent 的完整对话体验。
 
@@ -113,9 +113,11 @@
 
 **产物**: Chat 体验与 super-agent 功能对齐。
 
+> 本轮实现：3.1–3.5 已在 Phase 2 随 MessageBubble / ChatComposer / RouteExplainCard 完成；3.6 会话重命名（header inline 编辑 + Enter 确认 / Esc 取消）、3.7 会话重置（确认横幅 + 清理轮次提示）本次补齐。
+
 ---
 
-### Phase 4 — Admin 认证 + 路由守卫
+### Phase 4 — Admin 认证 + 路由守卫 ✅
 
 **目标**: Admin 区域可访问、可保护。
 
@@ -128,9 +130,11 @@
 
 **产物**: Admin 区域框架就绪。
 
+> 后端 auth 模块仍为 stub，登录端点未实现，登录会失败并友好提示；守卫与跳转链路已就绪，后端就绪后可直接对接。Sidebar 底部新增「管理后台」入口。
+
 ---
 
-### Phase 5 — Admin 仪表盘
+### Phase 5 — Admin 仪表盘 ✅
 
 **目标**: 运维概览页。
 
@@ -141,9 +145,11 @@
 
 **产物**: `/admin/dashboard` 页面。
 
+> 后端暂无聚合 API，当前用 `fetchDashboardMetrics`（会话总数，走 `/chat/session/list`）+ 已接入文档详情聚合（文档总数、索引成功率）计算。平均延迟 / 今日会话等需后端新增聚合端点后再补。
+
 ---
 
-### Phase 6 — Admin 文档管理增强
+### Phase 6 — Admin 文档管理增强 ✅
 
 **目标**: 在现有 `/documents` 基础上补全 super-agent 的管理能力。
 
@@ -154,6 +160,8 @@
 | 6.3 | 状态轮询 | 解析/索引进行中时自动轮询刷新 |
 
 **产物**: 文档管理能力与 super-agent admin 对齐。
+
+> `/admin/documents` 复用现有 `DocumentUpload` + `DocumentList`；`/admin/documents/:id` 复用 `DocumentDetail`（已含 6.2 策略确认 + 6.3 解析/索引轮询）。6.1 阶段管线可视化与日志抽屉属于增量增强，留待后续按需补。
 
 ---
 

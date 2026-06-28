@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkle } from '@phosphor-icons/react';
+import { Sparkle, PencilSimple, ArrowCounterClockwise, Check, X } from '@phosphor-icons/react';
 import { SessionSidebar } from '../components/chat/SessionSidebar';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { ChatComposer } from '../components/chat/ChatComposer';
@@ -9,6 +9,8 @@ import {
   listSessions,
   getSession,
   deleteSession as apiDeleteSession,
+  renameSession as apiRenameSession,
+  resetSession as apiResetSession,
   listDocumentOptions,
 } from '../api/chat';
 import { pageQueryRouteTrace } from '../api/knowledge';
@@ -56,6 +58,14 @@ export function ChatPage() {
 
   const [documentOptions, setDocumentOptions] = useState<KnowledgeDocumentOptionVo[]>([]);
   const [selectedDocumentId, setSelectedDocumentId] = useState('');
+
+  // 阶段：会话重命名 / 重置
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const [renamingBusy, setRenamingBusy] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   const currentAssistantIdRef = useRef('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -303,6 +313,57 @@ export function ChatPage() {
     if (currentId) stop(currentId);
   }, [currentId, stop]);
 
+  const latestAssistantId = [...displayMessages].reverse().find((m) => m.role === 'assistant')?.id;
+  const activeSession = sessions.find((s) => s.conversationId === currentId);
+  const activeTitle = activeSession?.title || activeSession?.latestTurn?.userPrompt || '新的对话';
+
+  const startRename = useCallback(() => {
+    if (isStreaming || !activeSession) return;
+    setRenameValue(activeSession.title || activeSession.latestTurn?.userPrompt || '新的对话');
+    setRenaming(true);
+    requestAnimationFrame(() => renameInputRef.current?.focus());
+  }, [isStreaming, activeSession]);
+
+  const cancelRename = useCallback(() => {
+    setRenaming(false);
+    setRenameValue('');
+    setRenamingBusy(false);
+  }, []);
+
+  const commitRename = useCallback(async () => {
+    const title = renameValue.trim();
+    if (!title || !currentId) return;
+    setRenamingBusy(true);
+    try {
+      await apiRenameSession({ conversationId: currentId, title });
+      setSessions((prev) =>
+        prev.map((s) => (s.conversationId === currentId ? { ...s, title } : s)),
+      );
+      setRenaming(false);
+      toast('会话标题已更新', 'success');
+    } catch (e) {
+      toast(normalizeError(e, '重命名失败'), 'error');
+    } finally {
+      setRenamingBusy(false);
+    }
+  }, [renameValue, currentId, toast]);
+
+  const handleReset = useCallback(async () => {
+    if (!currentId || isStreaming) return;
+    setResetting(true);
+    try {
+      const res = await apiResetSession(currentId);
+      await loadConversation(currentId);
+      await refreshSessions();
+      toast(`已重置会话，清理 ${res.removedTurnCount} 轮记录`, 'success');
+    } catch (e) {
+      toast(normalizeError(e, '重置失败'), 'error');
+    } finally {
+      setResetting(false);
+      setConfirmReset(false);
+    }
+  }, [currentId, isStreaming, loadConversation, refreshSessions, toast]);
+
   // 阶段：初始化
   useEffect(() => {
     (async () => {
@@ -313,10 +374,6 @@ export function ChatPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const latestAssistantId = [...displayMessages].reverse().find((m) => m.role === 'assistant')?.id;
-  const activeSession = sessions.find((s) => s.conversationId === currentId);
-  const activeTitle = activeSession?.title || activeSession?.latestTurn?.userPrompt || '新的对话';
 
   return (
     <div className="flex h-screen">
@@ -335,15 +392,97 @@ export function ChatPage() {
 
       {/* 主面板 */}
       <div className="flex-1 flex flex-col min-w-0 bg-neutral-950">
-        <header className="px-6 py-3.5 border-b border-neutral-800 flex items-center justify-between">
-          <h1 className="text-base font-semibold text-neutral-100 truncate">{activeTitle}</h1>
-          {isStreaming && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-[11px] font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-              正在生成回答...
-            </span>
+        <header className="px-6 py-3.5 border-b border-neutral-800 flex items-center justify-between gap-3">
+          {renaming ? (
+            <div className="flex items-center gap-2 min-w-0">
+              <input
+                ref={renameInputRef}
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') commitRename();
+                  if (e.key === 'Escape') cancelRename();
+                }}
+                disabled={renamingBusy}
+                className="flex-1 min-w-0 px-3 py-1.5 rounded-lg bg-neutral-900 border border-amber-500/40 text-sm text-neutral-100 outline-none focus:border-amber-500/60"
+              />
+              <button
+                onClick={commitRename}
+                disabled={renamingBusy || !renameValue.trim()}
+                title="确认"
+                className="shrink-0 w-8 h-8 grid place-items-center rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 transition-colors disabled:opacity-40"
+              >
+                <Check weight="bold" className="w-4 h-4" />
+              </button>
+              <button
+                onClick={cancelRename}
+                disabled={renamingBusy}
+                title="取消"
+                className="shrink-0 w-8 h-8 grid place-items-center rounded-lg border border-neutral-700 text-neutral-400 hover:text-neutral-200 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-base font-semibold text-neutral-100 truncate">{activeTitle}</h1>
+              {activeSession && (
+                <button
+                  onClick={startRename}
+                  disabled={isStreaming}
+                  title="重命名会话"
+                  className="shrink-0 w-7 h-7 grid place-items-center rounded-md text-neutral-500 hover:text-amber-400 hover:bg-neutral-800 transition-colors disabled:opacity-30"
+                >
+                  <PencilSimple className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           )}
+
+          <div className="flex items-center gap-3 shrink-0">
+            {activeSession && displayMessages.length > 0 && (
+              <button
+                onClick={() => setConfirmReset(true)}
+                disabled={isStreaming}
+                title="重置当前会话（清空历史轮次，保留会话）"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-neutral-800 bg-neutral-900 text-neutral-400 text-xs hover:text-red-400 hover:border-red-500/30 transition-colors disabled:opacity-40"
+              >
+                <ArrowCounterClockwise className="w-3.5 h-3.5" />
+                重置
+              </button>
+            )}
+            {isStreaming && (
+              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 text-[11px] font-mono">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                正在生成回答...
+              </span>
+            )}
+          </div>
         </header>
+
+        {confirmReset && (
+          <div className="mx-6 mt-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/30 text-sm flex items-center justify-between gap-4">
+            <span className="text-red-200">
+              重置会话将清空当前会话的所有历史轮次与记忆摘要，且不可恢复。确定继续？
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setConfirmReset(false)}
+                disabled={resetting}
+                className="px-3 py-1.5 rounded-lg border border-neutral-700 text-neutral-300 text-xs hover:bg-neutral-800 transition-colors"
+              >
+                取消
+              </button>
+              <button
+                onClick={handleReset}
+                disabled={resetting}
+                className="px-3 py-1.5 rounded-lg bg-red-500/90 text-white text-xs font-medium hover:bg-red-500 transition-colors disabled:opacity-50"
+              >
+                {resetting ? '重置中...' : '确认重置'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {pageError && (
           <div className="mx-6 mt-4 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-300 text-sm">

@@ -6,6 +6,7 @@ import {
   ChatCircle,
   ChatCenteredDots,
   Flask,
+  Shield,
 } from '@phosphor-icons/react';
 import type { Icon } from '@phosphor-icons/react';
 import { cn } from '../../lib/cn';
@@ -89,8 +90,15 @@ export function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-neutral-800">
-        <div className="text-[10px] text-neutral-600 font-mono">
+      <div className="px-3 py-4 border-t border-neutral-800 space-y-2">
+        <NavLink
+          to="/admin/dashboard"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-neutral-400 hover:text-amber-400 hover:bg-neutral-800/50 transition-colors"
+        >
+          <Shield weight="regular" className="w-4.5 h-4.5 shrink-0" />
+          <span>管理后台</span>
+        </NavLink>
+        <div className="px-3 text-[10px] text-neutral-600 font-mono">
           Spring Boot 3.5.6
         </div>
       </div>
