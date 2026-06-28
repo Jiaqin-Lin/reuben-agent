@@ -30,6 +30,23 @@ public enum DocumentManageCode implements BaseEnum {
     OPERATION_NOT_ALLOWED(20015, "当前状态不允许此操作"),
     CHUNK_NOT_FOUND(20016, "切块不存在"),
     TASK_NOT_FOUND(20017, "任务不存在"),
+
+    // ========== 知识域错误码（50001–50099）==========
+    SCOPE_NOT_FOUND(50001, "知识范围不存在"),
+    SCOPE_CODE_DUPLICATE(50002, "知识范围编码重复"),
+    TOPIC_NOT_FOUND(50003, "知识主题不存在"),
+    TOPIC_CODE_DUPLICATE(50004, "知识主题编码重复"),
+    RELATION_ALREADY_EXISTS(50005, "主题-文档关联已存在"),
+    RELATION_NOT_FOUND(50006, "主题-文档关联不存在"),
+    ROUTE_FAILED(50007, "知识路由失败"),
+    ROUTE_LOW_CONFIDENCE(50008, "知识路由置信度过低"),
+    ES_INDEX_FAILED(50009, "ES 索引操作失败"),
+    ES_INDEX_REFRESH_FAILED(50010, "ES 索引刷新失败"),
+    PROFILE_GENERATE_FAILED(50011, "文档画像生成失败"),
+    NEO4J_QUERY_FAILED(50012, "Neo4j 图查询失败"),
+    NEO4J_PROJECTION_FAILED(50013, "Neo4j 图投影失败"),
+    NEO4J_CONNECTION_FAILED(50014, "Neo4j 连接失败"),
+    GRAPH_NOT_AVAILABLE(50015, "图数据不可用"),
     ;
 
     @Getter

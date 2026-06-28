@@ -29,6 +29,8 @@ public class DocumentProperties {
 
     private Kafka kafka = new Kafka();
 
+    private KnowledgeRoute knowledgeRoute = new KnowledgeRoute();
+
     // ============ 内部类 — 按中间件/功能拆分 ============
 
     @Data
@@ -145,5 +147,52 @@ public class DocumentProperties {
         private String groupId = "reuben-agent-document";
         /** 是否自动创建 Topic（开发环境开启，生产环境关闭） */
         private Boolean autoCreateTopics = true;
+    }
+
+    /**
+     * 知识路由配置，绑定 {@code reuben.document.knowledge-route}。
+     *
+     * <p>所有权重和阈值均可通过 yml 覆盖，默认值对齐 super-agent 已验证参数。</p>
+     */
+    @Data
+    public static class KnowledgeRoute {
+        /** 知识路由总开关 */
+        private boolean enabled = true;
+        /** 语义分阈值，低于此忽略 */
+        private double semanticFloor = 0.20;
+        /** 语义分权重：(score - floor) * weight */
+        private double semanticWeight = 50.0;
+        /** ES 词法分上限 */
+        private double lexicalCap = 10.0;
+        /** ES 词法分权重：lexicalScore * weight */
+        private double lexicalWeight = 1.6;
+        /** 每个实体词命中加分 */
+        private double entityHitScore = 6.0;
+        /** topic 级 scope 匹配加分 */
+        private double scopeBoostTopic = 8.0;
+        /** document 级 scope 匹配加分 */
+        private double scopeBoostDocument = 15.0;
+        /** topic-doc relationScore 乘数 */
+        private double relationScoreWeight = 20.0;
+        /** 置信度归一化底数 */
+        private double confidenceNormalizerBase = 10.0;
+        /** 置信度归一化偏移 */
+        private double confidenceNormalizerOffset = 5.0;
+        /** 低置信度阈值 */
+        private double lowConfidenceThreshold = 0.55;
+        /** 语义分批大小 */
+        private int batchEmbeddingSize = 10;
+        /** scope 候选上限 */
+        private int maxScopeCandidates = 5;
+        /** topic 候选上限 */
+        private int maxTopicCandidates = 8;
+        /** document 候选上限 */
+        private int maxDocumentCandidates = 5;
+        /** 分词分隔符正则 */
+        private String tokenDelimiters = "[\\s、，,；;：:（）()\\-的和及与或]+";
+        /** 分词最小长度 */
+        private int tokenMinLength = 2;
+        /** 分词最大数量 */
+        private int tokenMaxCount = 40;
     }
 }
