@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Sparkle, PencilSimple, ArrowCounterClockwise, Check, X } from '@phosphor-icons/react';
+import { Sparkle, PencilSimple, ArrowCounterClockwise, Check, X, List } from '@phosphor-icons/react';
 import { SessionSidebar } from '../components/chat/SessionSidebar';
 import { MessageBubble } from '../components/chat/MessageBubble';
 import { ChatComposer } from '../components/chat/ChatComposer';
@@ -65,6 +65,7 @@ export function ChatPage() {
   const [renamingBusy, setRenamingBusy] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   const currentAssistantIdRef = useRef('');
@@ -136,6 +137,7 @@ export function ChatPage() {
         setPageError(normalizeError(e, '加载会话详情失败'));
       } finally {
         setLoadingConversation(false);
+        setMobileSidebarOpen(false);
       }
     },
     [isStreaming, scrollToBottom],
@@ -147,6 +149,7 @@ export function ChatPage() {
     setDisplayMessages([]);
     setInput('');
     setPageError('');
+    setMobileSidebarOpen(false);
   }, [isStreaming]);
 
   const handleDelete = useCallback(
@@ -377,8 +380,8 @@ export function ChatPage() {
 
   return (
     <div className="flex h-screen">
-      {/* 侧边栏 */}
-      <div className="w-[280px] shrink-0">
+      {/* 桌面侧边栏 */}
+      <div className="hidden lg:block w-[280px] shrink-0">
         <SessionSidebar
           sessions={sortedSessions}
           currentId={currentId}
@@ -390,10 +393,39 @@ export function ChatPage() {
         />
       </div>
 
+      {/* 移动端侧边栏抽屉 */}
+      {mobileSidebarOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 flex">
+          <div
+            className="w-[280px] h-full bg-neutral-950 border-r border-neutral-800"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <SessionSidebar
+              sessions={sortedSessions}
+              currentId={currentId}
+              loading={loadingSessions}
+              disabled={isStreaming}
+              onSelect={loadConversation}
+              onDelete={handleDelete}
+              onNew={startNewConversation}
+            />
+          </div>
+          <div className="flex-1 bg-black/50" onClick={() => setMobileSidebarOpen(false)} />
+        </div>
+      )}
+
       {/* 主面板 */}
       <div className="flex-1 flex flex-col min-w-0 bg-neutral-950">
-        <header className="px-6 py-3.5 border-b border-neutral-800 flex items-center justify-between gap-3">
-          {renaming ? (
+        <header className="px-4 lg:px-6 py-3.5 border-b border-neutral-800 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => setMobileSidebarOpen(true)}
+              className="lg:hidden shrink-0 w-9 h-9 grid place-items-center rounded-md border border-neutral-800 text-neutral-300"
+              title="打开会话列表"
+            >
+              <List className="w-4 h-4" />
+            </button>
+            {renaming ? (
             <div className="flex items-center gap-2 min-w-0">
               <input
                 ref={renameInputRef}
@@ -438,6 +470,7 @@ export function ChatPage() {
               )}
             </div>
           )}
+          </div>
 
           <div className="flex items-center gap-3 shrink-0">
             {activeSession && displayMessages.length > 0 && (

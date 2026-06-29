@@ -4,6 +4,8 @@
 
 **目标**: 功能上对齐 super-agent 前端（`/Users/reuben/Desktop/super-agent/vue/`），视觉风格沿用 reuben-agent 现有 UI（dark theme, amber accent, Geist fonts, Tailwind 4）。
 
+**状态**: ✅ Phase 0–9 全部完成；Phase 10（super-agent 功能缺口补齐）已识别，待实施。Chat 主体验、Admin 全量页面、响应式收尾均已交付；与 super-agent Vue 侧逐页对照后，文档详情页与观测轮次详情页存在功能级缺口。
+
 **技术栈**: React 19 + TypeScript + Vite 6 + Tailwind CSS 4 + Framer Motion (motion) + Phosphor Icons + React Router DOM v7
 
 **super-agent 源**: Vue 3 项目，`/Users/reuben/Desktop/super-agent/vue/src/`
@@ -201,19 +203,125 @@
 
 ---
 
-### Phase 9 — 收尾打磨
+### Phase 9 — 收尾打磨 ✅
 
 **目标**: 边界情况、响应式、动效润色。
 
 | # | 任务 | 说明 |
 |---|------|------|
-| 9.1 | 响应式适配 | 移动端侧边栏 slide-in overlay（1120px 断点），admin 侧边栏 drawer（1040px） |
-| 9.2 | Loading / Error / Empty | 所有页面三态覆盖 |
-| 9.3 | Toast 通知 | 操作反馈（成功/失败/加载中），已有 Toast 组件可复用 |
-| 9.4 | 键盘快捷键 | Enter 发送、Shift+Enter 换行、Esc 关闭弹窗 |
-| 9.5 | 动效一致性审查 | 所有动画 150-200ms、Y 轴平移为主、无过度动画 |
+| 9.1 | 响应式适配 | Chat 侧边栏在 `lg` 断点下变为抽屉（顶部 List 按钮触发，选中会话后自动收起）；Admin 侧边栏 `md` 断点变抽屉（已在 Phase 4 AdminLayout 内置） |
+| 9.2 | Loading / Error / Empty | 所有页面三态覆盖（ChatPage/SessionSidebar/AdminObservabilityListPage 等均已具备） |
+| 9.3 | Toast 通知 | 复用 `ToastProvider`，会话删除/重命名/重置、Admin 登录/退出、知识路由 CRUD 等操作均有反馈 |
+| 9.4 | 键盘快捷键 | ChatComposer Enter 发送 / Shift+Enter 换行；ChatPage 重命名 Enter 确认 / Esc 取消；Drawer 全局 Esc 关闭 |
+| 9.5 | 动效一致性审查 | Drawer / Toast / RouteExplainCard 折叠统一 `150-220ms`，Y 轴平移为主；MessageBubble 流式光标脉冲；hover 过渡 `transition-colors` |
 
 **产物**: 生产就绪。
+
+> 本轮收尾：ChatPage 增加 `lg` 断点抽屉侧边栏（顶栏 List 按钮切换，选中/新建会话后自动关闭），桌面端保持 280px 固定侧栏。AdminLayout 在 Phase 4 已实现 `md` 抽屉，无需重复。键盘快捷键与 Toast 在前序 Phase 已就绪，本次仅核对覆盖度。Phase 9 完成，UI 实现计划全部交付。
+
+---
+
+### Phase 10 — super-agent 功能缺口补齐（待实施）
+
+**目标**: 逐页对照 super-agent Vue 源（`/Users/linjiaqin.5/Desktop/learn/super-agent/vue/src/`）补齐功能级缺口。Phase 0–9 已交付主框架与基础体验，但 Vue 侧多个重页面（文档详情 4804 行、观测轮次详情 1764 行、知识路由 2238 行）相比 React 实现存在显著功能密度差距，需补齐。
+
+#### 10.1 文档详情页（最高优先级 — 功能闭环）
+
+Vue `AdminDocumentDetailView.vue` 4804 行 vs React `DocumentDetailPage.tsx` ~128 行。当前 React 只有 Meta + ParentBlockPanel + StrategyPanel 静态展示，admin 无法完成"调策略 → 构建索引 → 看进度 → 看分块 → 看任务"的闭环。
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.1.1 | Workbench 4-step 导航（概览/策略/执行/分块/任务，滚动锚点） | `:255-272` |
+| 10.1.2 | 策略调优工作台：每条 pipeline 上移/下移、策略 chip 切换、最终提交顺序预览 | `:421-535` |
+| 10.1.3 | "确认并构建"执行区 + 构建索引按钮（`submitConfirmStrategy` / `submitBuildIndex`） | `:574-597` |
+| 10.1.4 | Index Build Tracker（实时构建阶段流水线 + 任务快照 footer） | `AdminDocumentCenterView.vue:539-655` |
+| 10.1.5 | 构建期间锁页遮罩 | `:11-49` |
+| 10.1.6 | 分块工作台：分组/平铺切换、全部展开/收起、分块统计卡（父块数/总片段/向量可用/待处理/平均Token） | `:663-810` |
+| 10.1.7 | 分块详情抽屉（子证据 + 父上下文 + 兄弟块关系） | `:101-250` |
+| 10.1.8 | 任务日志抽屉（"任务执行详情"时间线 stage/event/detailJson） | `:50-100, :906-935` |
+| 10.1.9 | Tasks 区（第 4 步"查看任务记录" + 摘要日志列表） | `:906-935` |
+
+#### 10.2 文档列表页
+
+React `DocumentList` 当前走 localStorage，需切换到服务端分页 + 补交互。
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.2.1 | 服务端分页 + 关键词搜索 + 表格列（type/size/updateTime）+ 删除动作 | `AdminDocumentListView.vue:82-189` |
+| 10.2.2 | 统计卡（当前页文档/解析完成/策略确认/索引可用） | `:86-99` |
+| 10.2.3 | 上传表单补字段：`knowledgeScopeCode`、`businessCategory`、`documentTags` | `:108-148` |
+
+#### 10.3 观测-轮次详情页（功能密度最大缺口）
+
+Vue `AdminObservabilityDetailView.vue` 1764 行 vs React `AdminObservabilityExchangePage.tsx` 323 行。
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.3.1 | Header meta 行补：文档范围 / 引用 vs 推荐 / 总Token vs 成本 | `:55-65` |
+| 10.3.2 | 轮次摘要区（每阶段 summary cards：chips/metrics/textBlocks/listBlocks + "查看这个阶段的执行过程"链接） | `:122-189` |
+| 10.3.3 | 通道性能对比网格（召回数/闸门后/最终选入/耗时/平均分/分数区间 + 子问题） | `:191-229` |
+| 10.3.4 | 按子问题分组的检索结果表（排名变化/原始分/RRF分/Rerank分/状态徽章 已选入/闸门过滤/未选入） | `:231-289` |
+| 10.3.5 | Evidence Budget 区（总预算/单子问题预算/已纳入/已省略 + 渲染 vs 省略引用详情） | `:291-330` |
+| 10.3.6 | Prompt 预览（System/User tab 切换，`ragSystemPrompt` / `ragUserPrompt`） | `:332-356` |
+| 10.3.7 | 性能基准对比卡（本次 vs P50/P90/P99 + 比较等级徽章，`formatBenchmarkComparison`） | `:357-388` |
+| 10.3.8 | Trace Detail overlay（点时间线阶段弹出结构化详情：summaryItems/listSections） | `:390-420+` |
+
+#### 10.4 观测-会话详情页
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.4.1 | Session Context 区（最近用户问题/最近助手回答/Checkpoint vs 消息数） | `AdminObservabilitySessionView.vue:60-75` |
+| 10.4.2 | 记忆/长期摘要块（压缩 chips：covered/version/compress + 摘要文本 + 空态说明） | `:77-92` |
+| 10.4.3 | 轮次行 meta 补：引用数/推荐数/Token/成本（当前只有首包/总耗时） | `:131-148` |
+
+#### 10.5 仪表盘
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.5.1 | "建议演示路径"面板（4 步引导流） | `AdminDashboardView.vue:38-58` |
+| 10.5.2 | "最近接入文档"面板（刷新 + 6 个最近文档 + 解析/索引徽章） | `:60-99` |
+| 10.5.3 | 后端聚合 API 对接（summary：total/parseSuccess/strategyConfirmed/indexSuccess） | `:60-99` |
+
+#### 10.6 知识路由页
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.6.1 | Scope Coverage 面板（每 scope 覆盖率进度条 + topic/covered/pending/document 计数 + 总覆盖率，`scopeCoverageRows`/`overallCoverageRateText`） | `AdminKnowledgeRouteView.vue:29-55, :779-806` |
+| 10.6.2 | Profile Anomalies 面板（异常列表 + tone + 逐行复选 + "全选异常" + 批量修复，`profileAnomalyRows`/`batchRepairProfiles`） | `:161-205, :808+` |
+
+#### 10.7 路由追踪页
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.7.1 | 可折叠 insight bar 容器 | `AdminKnowledgeRouteTraceView.vue:22-65` |
+| 10.7.2 | 健康度进度条 meter + "详细统计" mini-stats grid（`summaryCards`） | `:22-65` |
+
+#### 10.8 观测列表页
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.8.1 | 数字分页导航（1 2 3 4 5 … N 带省略号，`paginationItems`） | `AdminObservabilityListView.vue:141-153` |
+| 10.8.2 | 状态筛选补 `STOPPED` 选项 | `:141-153` |
+
+#### 10.9 Chat 页
+
+| # | 任务 | Vue 源位置 |
+|---|------|----------|
+| 10.9.1 | 当前文档 / 自动预选 scope pills：`selectedDocumentName` pill、"最近主候选：…" pill（当前 `ChatComposer.tsx:123-126` 只有静态文本） | `BusinessChatView.vue:176-184` |
+
+#### 10.10 已对齐（无需补）
+
+AdminLogin、StatusBadge、知识路由 4 Tab CRUD + 抽屉、路由追踪的筛选/列表/详情、观测列表的筛选/搜索、Chat 的停止/复制/推荐追问/路由解释卡 —— 功能已对齐，仅余视觉细节差异。
+
+#### 实施优先级
+
+1. **10.1 文档详情**（策略调优 + 构建索引 + Build Tracker）—— admin 功能闭环，没这个无法用
+2. **10.3 观测轮次详情**（通道性能 + 分组检索表 + Trace overlay）—— 运维定位问题核心
+3. **10.2 文档列表**（服务端分页 + 搜索 + 删除）—— 基础体验
+4. **10.4 / 10.5 / 10.6** 按需补
+5. **10.7 / 10.8 / 10.9** 收尾
+
+**产物**: reuben-agent UI 与 super-agent 功能对齐，admin 文档/观测两条主线达到生产可用密度。
 
 ---
 
