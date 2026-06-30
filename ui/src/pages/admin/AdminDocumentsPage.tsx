@@ -31,7 +31,7 @@ export function AdminDocumentsPage() {
         <DocumentUpload onUploaded={handleUploaded} />
       </div>
 
-      <DocumentList refreshKey={refreshKey} />
+      <DocumentList refreshKey={refreshKey} linkBase="/admin/documents" />
     </AdminPage>
   );
 }

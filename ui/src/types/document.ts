@@ -25,13 +25,34 @@ export interface DocumentDetailVo {
   parseStatus: number;
   strategyStatus: number;
   indexStatus: number;
-  charCount: number;
+  charCount?: number;
+  tokenCount?: number;
   structureLevel: number;
   qualityLevel: number;
+  parseErrorMsg?: string;
+  knowledgeScopeCode?: string;
+  knowledgeScopeName?: string;
+  businessCategory?: string;
+  documentTags?: string;
+  currentPlanId?: string;
+  latestIndexTaskId?: string;
+  latestTaskId?: string;
+  latestTaskType?: number;
+  latestTaskStatus?: number;
   createTime: string;
-  updateTime: string;
+  updateTime?: string;
   parentBlocks?: DocumentParentBlock[];
   chunks?: DocumentChunk[];
+}
+
+export interface DocumentStrategyStepVo {
+  stepId: string;
+  stepNo: number;
+  pipelineType: string;
+  strategyType: number;
+  strategyRole?: number;
+  sourceType?: number;
+  recommendReason?: string;
 }
 
 export interface DocumentStrategyPlanVo {
@@ -42,12 +63,23 @@ export interface DocumentStrategyPlanVo {
   planStatus: number;
   strategyCount: number;
   strategySnapshot: string;
-  recommendReason: string;
+  recommendReason?: string;
+  adjustNote?: string;
+  steps?: DocumentStrategyStepVo[];
+}
+
+export interface StrategyStepInput {
+  stepNo: number;
+  strategyType: number;
 }
 
 export interface DocumentStrategyConfirmDto {
   documentId: string;
   planId: string;
+  basePlanId?: string;
+  adjustNote?: string;
+  parentSteps?: StrategyStepInput[];
+  childSteps?: StrategyStepInput[];
   confirmUserId?: string;
 }
 
@@ -56,6 +88,20 @@ export interface DocumentStrategyConfirmVo {
   planId: string;
   documentId: string;
   planStatus: number;
+}
+
+export interface DocumentIndexBuildDto {
+  documentId: string;
+  planId: string;
+  operatorId?: string;
+}
+
+export interface DocumentIndexBuildVo {
+  documentId: string;
+  taskId: string;
+  taskType: number;
+  taskStatus: number;
+  indexStatus: number;
 }
 
 export interface DocumentParentBlock {
@@ -97,6 +143,77 @@ export interface DocumentChunk {
   vectorStatus: number;
   vectorStoreType: number;
   vectorId: string;
+}
+
+/** 服务端分页 Chunk 列表项（/document/{id}/chunks） */
+export interface DocumentChunkVo {
+  chunkId: string;
+  parentBlockId?: string;
+  parentBlockNo?: number;
+  parentChildCount?: number;
+  parentStartChunkNo?: number;
+  parentEndChunkNo?: number;
+  chunkNo: number;
+  sectionPath?: string;
+  sourceType: number;
+  charCount: number;
+  tokenCount: number;
+  vectorStatus: number;
+  chunkText: string;
+}
+
+export interface DocumentParentBlockVo {
+  parentBlockId: string;
+  parentBlockNo: number;
+  sectionPath?: string;
+  sourceType: number;
+  charCount: number;
+  childCount: number;
+  startChunkNo: number;
+  endChunkNo: number;
+  parentText: string;
+}
+
+export interface DocumentChunkDetailVo {
+  documentId: string;
+  taskId?: string;
+  planId?: string;
+  chunk?: DocumentChunkVo;
+  parentBlock?: DocumentParentBlockVo;
+  siblingChunks?: DocumentChunkVo[];
+}
+
+export interface DocumentTaskLogVo {
+  id: string;
+  stageType: number;
+  eventType: number;
+  logLevel: number;
+  content: string;
+  detailJson?: string;
+  createTime: string;
+}
+
+export interface DocumentTaskLogQueryVo {
+  taskId: string;
+  documentId: string;
+  taskType: number;
+  taskStatus: number;
+  currentStage?: number;
+  startTime?: string;
+  finishTime?: string;
+  costMillis?: number;
+  errorCode?: string;
+  errorMsg?: string;
+  total: number;
+  logs: DocumentTaskLogVo[];
+}
+
+export interface DocumentDeleteVo {
+  documentId: string;
+  documentName: string;
+  storageCleaned: boolean;
+  vectorCleaned: boolean;
+  keywordCleaned: boolean;
 }
 
 /** Lightweight document info stored in localStorage */

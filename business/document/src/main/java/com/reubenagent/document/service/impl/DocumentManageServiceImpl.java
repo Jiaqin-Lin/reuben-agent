@@ -59,9 +59,15 @@ import com.reubenagent.document.vo.DocumentListItemVo;
 import com.reubenagent.document.vo.DocumentParentBlockVo;
 import com.reubenagent.document.vo.DocumentStrategyConfirmVo;
 import com.reubenagent.document.vo.DocumentStrategyPlanVo;
+import com.reubenagent.document.vo.DocumentStrategyStepVo;
 import com.reubenagent.document.vo.DocumentTaskLogQueryVo;
 import com.reubenagent.document.vo.DocumentTaskLogVo;
 import com.reubenagent.document.vo.DocumentUploadVo;
+import com.reubenagent.document.enums.DocumentPlanSourceEnum;
+import com.reubenagent.document.enums.DocumentStrategyExecuteStatusEnum;
+import com.reubenagent.document.enums.DocumentStrategyPipelineTypeEnum;
+import com.reubenagent.document.enums.DocumentStrategyRoleEnum;
+import com.reubenagent.document.enums.DocumentStrategySourceTypeEnum;
 import com.reubenagent.framework.uid.UidGenerator;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -210,13 +216,17 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
 
     @Override
     public DocumentStrategyConfirmVo confirmStrategy(DocumentStrategyConfirmDto dto) {
-        DocumentStrategyPlan plan = strategyPlanMapper.selectById(dto.getPlanId());
-        if (plan == null) {
-            throw new DocumentException(DocumentManageCode.PLAN_NOT_FOUND, "planId=" + dto.getPlanId());
+        Long basePlanId = dto.getBasePlanId() != null ? dto.getBasePlanId() : dto.getPlanId();
+        if (basePlanId == null) {
+            throw new DocumentException(DocumentManageCode.PLAN_NOT_FOUND, "planId 为空");
         }
-        if (!DocumentPlanStatusEnum.WAIT_CONFIRM.getCode().equals(plan.getPlanStatus())) {
+        DocumentStrategyPlan basePlan = strategyPlanMapper.selectById(basePlanId);
+        if (basePlan == null) {
+            throw new DocumentException(DocumentManageCode.PLAN_NOT_FOUND, "planId=" + basePlanId);
+        }
+        if (!DocumentPlanStatusEnum.WAIT_CONFIRM.getCode().equals(basePlan.getPlanStatus())) {
             throw new DocumentException(DocumentManageCode.PLAN_STATUS_INVALID,
-                    "planId=" + dto.getPlanId() + " currentStatus=" + plan.getPlanStatus() + " expected=WAIT_CONFIRM");
+                    "planId=" + basePlanId + " currentStatus=" + basePlan.getPlanStatus() + " expected=WAIT_CONFIRM");
         }
 
         Document document = documentMapper.selectById(dto.getDocumentId());
@@ -226,11 +236,35 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
 
         Long operatorId = dto.getConfirmUserId();
 
+        // 判断是否调优：parentSteps/childSteps 非空且签名与基础方案不一致时落库新方案版本
+        Long effectivePlanId;
+        boolean adjusted;
+        List<DocumentStrategyStep> baseSteps = strategyStepMapper.selectList(
+                new LambdaQueryWrapper<DocumentStrategyStep>()
+                        .eq(DocumentStrategyStep::getPlanId, basePlanId)
+                        .orderByAsc(DocumentStrategyStep::getStepNo));
+
+        if (dto.getParentSteps() != null && !dto.getParentSteps().isEmpty()
+                && dto.getChildSteps() != null && !dto.getChildSteps().isEmpty()) {
+            String baseSignature = buildStepSignature(baseSteps);
+            String adjustedSignature = buildInputSignature(dto.getParentSteps(), dto.getChildSteps());
+            if (!baseSignature.equals(adjustedSignature)) {
+                effectivePlanId = persistAdjustedPlan(document, basePlan, baseSteps, dto, operatorId);
+                adjusted = true;
+            } else {
+                effectivePlanId = basePlanId;
+                adjusted = false;
+            }
+        } else {
+            effectivePlanId = basePlanId;
+            adjusted = false;
+        }
+
         Long taskId = uidGenerator.getUid();
         DocumentTask task = DocumentTask.builder()
                 .id(taskId)
                 .documentId(dto.getDocumentId())
-                .strategyPlanId(dto.getPlanId())
+                .strategyPlanId(effectivePlanId)
                 .taskType(DocumentTaskTypeEnum.BUILD_INDEX.getCode())
                 .taskStatus(DocumentTaskStatusEnum.NEW.getCode())
                 .currentStage(DocumentTaskStageEnum.STRATEGY_CONFIRM.getCode())
@@ -244,43 +278,180 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
                 .taskId(taskId)
                 .documentId(dto.getDocumentId())
                 .stageType(DocumentTaskStageEnum.STRATEGY_CONFIRM.getCode())
-                .eventType(DocumentTaskEventTypeEnum.COMPLETE.getCode())
+                .eventType(adjusted
+                        ? DocumentTaskEventTypeEnum.USER_ADJUST.getCode()
+                        : DocumentTaskEventTypeEnum.COMPLETE.getCode())
                 .logLevel(DocumentLogLevelEnum.INFO.getCode())
                 .operatorType(resolveOperatorType(operatorId))
                 .operatorId(operatorId)
-                .content("策略方案已确认，已投递索引构建任务")
+                .content(adjusted ? "用户调优策略方案并确认，已投递索引构建任务" : "策略方案已确认，已投递索引构建任务")
                 .build();
 
-        plan.setPlanStatus(DocumentPlanStatusEnum.CONFIRMED.getCode());
-        plan.setConfirmUserId(operatorId);
-        plan.setConfirmTime(new java.util.Date());
+        if (!adjusted) {
+            basePlan.setPlanStatus(DocumentPlanStatusEnum.CONFIRMED.getCode());
+            basePlan.setConfirmUserId(operatorId);
+            basePlan.setConfirmTime(new java.util.Date());
+        }
 
+        Long finalEffectivePlanId = effectivePlanId;
         transactionTemplate.executeWithoutResult(status -> {
             documentTaskMapper.insert(task);
             documentTaskLogMapper.insert(taskLog);
-            strategyPlanMapper.updateById(plan);
+            if (adjusted) {
+                // 基础方案置为废弃，新方案已在 persistAdjustedPlan 内落库
+                strategyPlanMapper.updateById(DocumentStrategyPlan.builder()
+                        .id(basePlanId)
+                        .planStatus(DocumentPlanStatusEnum.DISCARDED.getCode())
+                        .build());
+            } else {
+                strategyPlanMapper.updateById(basePlan);
+            }
             documentMapper.updateById(Document.builder()
                     .id(document.getId())
-                    .currentStrategyPlanId(plan.getId())
+                    .currentStrategyPlanId(finalEffectivePlanId)
                     .strategyStatus(DocumentStrategyStatusEnum.CONFIRMED.getCode())
+                    .latestIndexTaskId(taskId)
                     .build());
         });
 
-        log.info("策略方案已确认: documentId={} planId={} taskId={}", dto.getDocumentId(), dto.getPlanId(), taskId);
+        log.info("策略方案已确认: documentId={} planId={} adjusted={} taskId={}",
+                dto.getDocumentId(), effectivePlanId, adjusted, taskId);
 
         DocumentKafkaProducer kafkaProducer = kafkaProducerProvider.getIfAvailable();
         if (kafkaProducer != null) {
-            kafkaProducer.sendIndexBuild(new DocumentIndexBuildMessage(dto.getDocumentId(), taskId, dto.getPlanId()));
+            kafkaProducer.sendIndexBuild(new DocumentIndexBuildMessage(dto.getDocumentId(), taskId, effectivePlanId));
         } else {
             log.debug("Kafka 不可用，跳过 index-build 消息发送");
         }
 
         return DocumentStrategyConfirmVo.builder()
                 .taskId(taskId)
-                .planId(dto.getPlanId())
+                .planId(effectivePlanId)
                 .documentId(dto.getDocumentId())
                 .planStatus(DocumentPlanStatusEnum.CONFIRMED.getCode())
                 .build();
+    }
+
+    /**
+     * 落库调优后的新方案版本 + 步骤，返回新 planId。
+     */
+    private Long persistAdjustedPlan(Document document, DocumentStrategyPlan basePlan,
+                                     List<DocumentStrategyStep> baseSteps,
+                                     DocumentStrategyConfirmDto dto, Long operatorId) {
+        DocumentStrategyPlan latestPlan = strategyPlanMapper.selectOne(
+                new LambdaQueryWrapper<DocumentStrategyPlan>()
+                        .eq(DocumentStrategyPlan::getDocumentId, document.getId())
+                        .orderByDesc(DocumentStrategyPlan::getPlanVersion)
+                        .last("LIMIT 1"));
+        int planVersion = (latestPlan != null && latestPlan.getPlanVersion() != null)
+                ? latestPlan.getPlanVersion() + 1 : 1;
+
+        Long newPlanId = uidGenerator.getUid();
+        String snapshot = buildInputSignature(dto.getParentSteps(), dto.getChildSteps());
+        int strategyCount = dto.getParentSteps().size() + dto.getChildSteps().size();
+
+        DocumentStrategyPlan newPlan = DocumentStrategyPlan.builder()
+                .id(newPlanId)
+                .documentId(document.getId())
+                .planVersion(planVersion)
+                .planSource(DocumentPlanSourceEnum.USER_ADJUST.getCode())
+                .planStatus(DocumentPlanStatusEnum.CONFIRMED.getCode())
+                .strategyCount(strategyCount)
+                .strategySnapshot(snapshot)
+                .recommendReason(basePlan.getRecommendReason())
+                .adjustNote(dto.getAdjustNote())
+                .confirmUserId(operatorId)
+                .confirmTime(new java.util.Date())
+                .build();
+        strategyPlanMapper.insert(newPlan);
+
+        // 构建调优步骤实体：父管道在前，子管道在后；角色按位置推导
+        List<DocumentStrategyStep> newSteps = new ArrayList<>();
+        int stepNo = 1;
+        for (DocumentStrategyConfirmDto.StrategyStepInput input : dto.getParentSteps()) {
+            newSteps.add(buildAdjustedStep(newPlanId, document.getId(), stepNo++,
+                    DocumentStrategyPipelineTypeEnum.PARENT.getStringCode(), input, dto.getParentSteps().size(),
+                    baseSteps));
+        }
+        for (DocumentStrategyConfirmDto.StrategyStepInput input : dto.getChildSteps()) {
+            newSteps.add(buildAdjustedStep(newPlanId, document.getId(), stepNo++,
+                    DocumentStrategyPipelineTypeEnum.CHILD.getStringCode(), input, dto.getChildSteps().size(),
+                    baseSteps));
+        }
+        for (DocumentStrategyStep step : newSteps) {
+            strategyStepMapper.insert(step);
+        }
+
+        log.info("调优方案已落库: documentId={} basePlanId={} newPlanId={} version={}",
+                document.getId(), basePlan.getId(), newPlanId, planVersion);
+        return newPlanId;
+    }
+
+    private DocumentStrategyStep buildAdjustedStep(Long planId, Long documentId, int stepNo,
+                                                   String pipelineType,
+                                                   DocumentStrategyConfirmDto.StrategyStepInput input,
+                                                   int pipelineSize,
+                                                   List<DocumentStrategyStep> baseSteps) {
+        Integer strategyType = input.getStrategyType();
+        // 角色按位置推导：单步 PRIMARY；多步首 PRIMARY、末 FALLBACK、中 OPTIMIZE
+        int indexInPipeline = (input.getStepNo() != null ? input.getStepNo() : stepNo) - 1;
+        DocumentStrategyRoleEnum role;
+        if (pipelineSize <= 1) {
+            role = DocumentStrategyRoleEnum.PRIMARY;
+        } else if (indexInPipeline == 0) {
+            role = DocumentStrategyRoleEnum.PRIMARY;
+        } else if (indexInPipeline == pipelineSize - 1) {
+            role = DocumentStrategyRoleEnum.FALLBACK;
+        } else {
+            role = DocumentStrategyRoleEnum.OPTIMIZE;
+        }
+
+        // 复用基础方案中同管道同策略类型的推荐理由，缺失则补默认
+        String reason = baseSteps.stream()
+                .filter(s -> strategyType.equals(s.getStrategyType())
+                        && pipelineType.equals(s.getPipelineType()))
+                .map(DocumentStrategyStep::getRecommendReason)
+                .filter(Objects::nonNull)
+                .findFirst()
+                .orElse("用户调优策略");
+
+        return DocumentStrategyStep.builder()
+                .id(uidGenerator.getUid())
+                .planId(planId)
+                .documentId(documentId)
+                .stepNo(stepNo)
+                .pipelineType(pipelineType)
+                .strategyType(strategyType)
+                .strategyRole(role.getCode())
+                .sourceType(DocumentStrategySourceTypeEnum.USER_ADD.getCode())
+                .executeStatus(DocumentStrategyExecuteStatusEnum.WAIT_EXECUTE.getCode())
+                .recommendReason(reason)
+                .build();
+    }
+
+    /** 现有步骤签名：PARENT:1,2;CHILD:3 */
+    private String buildStepSignature(List<DocumentStrategyStep> steps) {
+        String parent = steps.stream()
+                .filter(s -> DocumentStrategyPipelineTypeEnum.PARENT.getStringCode().equals(s.getPipelineType()))
+                .map(s -> String.valueOf(s.getStrategyType()))
+                .collect(Collectors.joining(","));
+        String child = steps.stream()
+                .filter(s -> DocumentStrategyPipelineTypeEnum.CHILD.getStringCode().equals(s.getPipelineType()))
+                .map(s -> String.valueOf(s.getStrategyType()))
+                .collect(Collectors.joining(","));
+        return "PARENT:" + parent + ";CHILD:" + child;
+    }
+
+    /** 调优入参签名：与 buildStepSignature 同格式以便对比 */
+    private String buildInputSignature(List<DocumentStrategyConfirmDto.StrategyStepInput> parentSteps,
+                                       List<DocumentStrategyConfirmDto.StrategyStepInput> childSteps) {
+        String parent = parentSteps.stream()
+                .map(s -> String.valueOf(s.getStrategyType()))
+                .collect(Collectors.joining(","));
+        String child = childSteps.stream()
+                .map(s -> String.valueOf(s.getStrategyType()))
+                .collect(Collectors.joining(","));
+        return "PARENT:" + parent + ";CHILD:" + child;
     }
 
     @Override
@@ -503,6 +674,15 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
         if (doc == null) {
             throw new DocumentException(DocumentManageCode.DOCUMENT_NOT_FOUND, "documentId=" + documentId);
         }
+
+        // 最近一条任务（任意类型），用于工作台 Build Tracker 在途判定
+        List<DocumentTask> latestTasks = documentTaskMapper.selectList(
+                new LambdaQueryWrapper<DocumentTask>()
+                        .eq(DocumentTask::getDocumentId, documentId)
+                        .orderByDesc(DocumentTask::getCreateTime)
+                        .last("LIMIT 1"));
+        DocumentTask latestTask = latestTasks.isEmpty() ? null : latestTasks.get(0);
+
         return DocumentDetailVo.builder()
                 .documentId(doc.getId())
                 .documentName(doc.getDocumentName())
@@ -513,9 +693,21 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
                 .strategyStatus(doc.getStrategyStatus())
                 .indexStatus(doc.getIndexStatus())
                 .charCount(doc.getCharCount())
+                .tokenCount(doc.getTokenCount())
                 .structureLevel(doc.getStructureLevel())
                 .contentQualityLevel(doc.getContentQualityLevel())
+                .parseErrorMsg(doc.getParseErrorMsg())
+                .knowledgeScopeCode(doc.getKnowledgeScopeCode())
+                .knowledgeScopeName(doc.getKnowledgeScopeName())
+                .businessCategory(doc.getBusinessCategory())
+                .documentTags(doc.getDocumentTags())
+                .currentPlanId(doc.getCurrentStrategyPlanId())
+                .latestIndexTaskId(doc.getLatestIndexTaskId())
+                .latestTaskId(latestTask != null ? latestTask.getId() : null)
+                .latestTaskType(latestTask != null ? latestTask.getTaskType() : null)
+                .latestTaskStatus(latestTask != null ? latestTask.getTaskStatus() : null)
                 .createTime(doc.getCreateTime())
+                .updateTime(doc.getUpdateTime())
                 .build();
     }
 
@@ -525,6 +717,18 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
                 new LambdaQueryWrapper<DocumentStrategyPlan>()
                         .eq(DocumentStrategyPlan::getDocumentId, documentId)
                         .orderByDesc(DocumentStrategyPlan::getCreateTime));
+        if (plans.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<Long> planIds = plans.stream().map(DocumentStrategyPlan::getId).collect(Collectors.toList());
+        Map<Long, List<DocumentStrategyStep>> stepMap = strategyStepMapper.selectList(
+                        new LambdaQueryWrapper<DocumentStrategyStep>()
+                                .in(DocumentStrategyStep::getPlanId, planIds)
+                                .orderByAsc(DocumentStrategyStep::getStepNo))
+                .stream()
+                .collect(Collectors.groupingBy(DocumentStrategyStep::getPlanId));
+
         return plans.stream()
                 .map(p -> DocumentStrategyPlanVo.builder()
                         .planId(p.getId())
@@ -535,8 +739,24 @@ public class DocumentManageServiceImpl implements IDocumentManageService {
                         .strategyCount(p.getStrategyCount())
                         .strategySnapshot(p.getStrategySnapshot())
                         .recommendReason(p.getRecommendReason())
+                        .adjustNote(p.getAdjustNote())
+                        .steps(stepMap.getOrDefault(p.getId(), Collections.emptyList()).stream()
+                                .map(this::toStepVo)
+                                .collect(Collectors.toList()))
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    private DocumentStrategyStepVo toStepVo(DocumentStrategyStep step) {
+        return DocumentStrategyStepVo.builder()
+                .stepId(step.getId())
+                .stepNo(step.getStepNo())
+                .pipelineType(step.getPipelineType())
+                .strategyType(step.getStrategyType())
+                .strategyRole(step.getStrategyRole())
+                .sourceType(step.getSourceType())
+                .recommendReason(step.getRecommendReason())
+                .build();
     }
 
     @Override

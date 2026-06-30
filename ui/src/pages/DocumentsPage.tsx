@@ -28,7 +28,7 @@ export function DocumentsPage() {
         <DocumentUpload onUploaded={handleUploaded} />
       </div>
 
-      <DocumentList refreshKey={refreshKey} />
+      <DocumentList refreshKey={refreshKey} linkBase="/documents" />
     </div>
   );
 }

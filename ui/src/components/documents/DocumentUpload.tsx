@@ -3,8 +3,8 @@ import { Upload, X } from '@phosphor-icons/react';
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadDocument } from '../../api/document';
 import { useToast } from '../shared/Toast';
-import { FILE_LIMITS, STORAGE_KEY } from '../../lib/constants';
-import type { DocumentUploadVo, StoredDocument } from '../../types/document';
+import { FILE_LIMITS } from '../../lib/constants';
+import type { DocumentUploadVo } from '../../types/document';
 
 interface Props {
   onUploaded: (vo: DocumentUploadVo) => void;
@@ -32,20 +32,6 @@ export function DocumentUpload({ onUploaded }: Props) {
     try {
       const vo = await uploadDocument(file, undefined, setProgress);
       toast(`上传成功: ${vo.documentName}`, 'success');
-      // Store in localStorage
-      const stored: StoredDocument = {
-        documentId: vo.documentId,
-        documentName: vo.documentName,
-        uploadedAt: new Date().toISOString(),
-      };
-      const existing = JSON.parse(
-        localStorage.getItem(STORAGE_KEY) ?? '[]',
-      ) as StoredDocument[];
-      const filtered = existing.filter((d) => d.documentId !== vo.documentId);
-      localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify([stored, ...filtered]),
-      );
       onUploaded(vo);
       setFile(null);
       setProgress(0);

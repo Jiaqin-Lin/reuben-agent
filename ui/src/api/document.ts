@@ -1,4 +1,4 @@
-import { apiUpload, apiGet, apiPost } from './client';
+import { apiUpload, apiGet, apiPost, apiDelete } from './client';
 import type {
   DocumentUploadDto,
   DocumentUploadVo,
@@ -6,8 +6,14 @@ import type {
   DocumentStrategyPlanVo,
   DocumentStrategyConfirmVo,
   DocumentStrategyConfirmDto,
+  DocumentIndexBuildDto,
+  DocumentIndexBuildVo,
   DocumentPageQuery,
   DocumentListItemVo,
+  DocumentChunkVo,
+  DocumentChunkDetailVo,
+  DocumentTaskLogQueryVo,
+  DocumentDeleteVo,
 } from '../types/document';
 import type { PageVo } from '../types/chat';
 
@@ -52,4 +58,45 @@ export function confirmStrategy(
   dto: DocumentStrategyConfirmDto,
 ): Promise<DocumentStrategyConfirmVo> {
   return apiPost<DocumentStrategyConfirmVo>('/document/strategy/confirm', dto);
+}
+
+export function buildIndex(
+  dto: DocumentIndexBuildDto,
+): Promise<DocumentIndexBuildVo> {
+  return apiPost<DocumentIndexBuildVo>('/document/index/build', dto);
+}
+
+export function deleteDocument(id: string): Promise<DocumentDeleteVo> {
+  return apiDelete<DocumentDeleteVo>(`/document/${id}`);
+}
+
+export function listChunks(
+  documentId: string,
+  taskId?: string,
+  pageNo = 1,
+  pageSize = 20,
+): Promise<PageVo<DocumentChunkVo>> {
+  const params: Record<string, string> = {
+    pageNo: String(pageNo),
+    pageSize: String(pageSize),
+  };
+  if (taskId) params.taskId = taskId;
+  return apiGet<PageVo<DocumentChunkVo>>(`/document/${documentId}/chunks`, params);
+}
+
+export function getChunkDetail(
+  chunkId: string,
+): Promise<DocumentChunkDetailVo> {
+  return apiGet<DocumentChunkDetailVo>(`/document/chunk/${chunkId}`);
+}
+
+export function getTaskLogs(
+  taskId: string,
+  pageNo = 1,
+  pageSize = 50,
+): Promise<DocumentTaskLogQueryVo> {
+  return apiGet<DocumentTaskLogQueryVo>(`/document/task/${taskId}/logs`, {
+    pageNo: String(pageNo),
+    pageSize: String(pageSize),
+  });
 }

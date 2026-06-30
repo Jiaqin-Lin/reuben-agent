@@ -5,6 +5,7 @@ import {
   IndexStatus,
   PlanStatus,
   VectorStatus,
+  TaskStatus,
   getStatusStyle,
   type StatusType,
 } from '../../types/enums';
@@ -15,6 +16,7 @@ const LABELS: Record<StatusType, Record<number, string>> = {
   plan: PlanStatus,
   index: IndexStatus,
   vector: VectorStatus,
+  task: TaskStatus,
 };
 
 interface Props {
