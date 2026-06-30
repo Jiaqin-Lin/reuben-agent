@@ -142,6 +142,27 @@ export interface ChatTraceStageView {
   errorMessage?: string;
 }
 
+/** 模型用量追踪（debugTraceJson.modelUsageTraces 元素）。 */
+export interface ChatModelUsageTrace {
+  promptTokens?: number;
+  completionTokens?: number;
+  totalTokens?: number;
+  estimatedCost?: number;
+  [key: string]: unknown;
+}
+
+/** debugTraceJson 解析结果（reuben-agent 后端当前仅持久化 modelUsageTraces，其余字段为容错空态）。 */
+export interface ChatDebugTrace {
+  rewriteQuestion?: string;
+  agentQuestion?: string;
+  modelUsageTraces?: ChatModelUsageTrace[];
+  ragSystemPrompt?: string;
+  ragUserPrompt?: string;
+  historySummary?: string;
+  retrievalNotes?: string[];
+  [key: string]: unknown;
+}
+
 export interface ChatTurnDetailView {
   turn: ChatTurnVo;
   stageTraces: ChatTraceStageView[];
@@ -154,8 +175,15 @@ export interface RetrievalResultView {
   subQuestionIndex?: number;
   channelType: string;
   vectorRank?: number;
+  vectorScore?: number;
+  keywordRank?: number;
+  keywordScore?: number;
+  originalScore?: number;
+  rrfScore?: number;
   rerankScore?: number;
   finalScore?: number;
+  channelRank?: number;
+  finalRank?: number;
   gatePassed?: number;
   isSelected?: number;
   documentId: number;
@@ -181,6 +209,8 @@ export interface ChannelExecutionView {
   finalSelectedCount?: number;
   maxScore?: number;
   minScore?: number;
+  avgScore?: number;
+  errorMessage?: string;
 }
 
 export interface StageBenchmarkView {

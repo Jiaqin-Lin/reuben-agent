@@ -159,3 +159,56 @@ export function shortenId(value?: string): string {
   if (normalized.length <= 14) return normalized || '-';
   return `${normalized.slice(0, 6)}...${normalized.slice(-6)}`;
 }
+
+/**
+ * 数字分页导航条目：当前页左右各保留 1 页，首尾恒定显示，中间用 '...' 省略号。
+ * 例如 current=1 total=10 → [1,2,'...',9,10]；current=5 → [1,'...',4,5,6,'...',10]。
+ */
+export function paginationItems(current: number, total: number): (number | '...')[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  const items: (number | '...')[] = [1];
+  const left = Math.max(2, current - 1);
+  const right = Math.min(total - 1, current + 1);
+  if (left > 2) items.push('...');
+  for (let i = left; i <= right; i++) items.push(i);
+  if (right < total - 1) items.push('...');
+  items.push(total);
+  return items;
+}
+
+/** 通道执行状态格式化。 */
+export function executionStateLabel(state?: string): string {
+  if (!state) return '未知';
+  const normalized = state.toUpperCase();
+  if (normalized === 'COMPLETED' || normalized === '1') return '已完成';
+  if (normalized === 'FAILED' || normalized === '0') return '失败';
+  if (normalized === 'RUNNING') return '进行中';
+  return state;
+}
+
+/**
+ * 单阶段耗时与基准对比：本次耗时落在 P50/P90/P99 哪个区间。
+ * 移植 Vue formatBenchmarkComparison，level 用于配色，text 用于展示。
+ */
+export function formatBenchmarkComparison(
+  actualMs?: number,
+  benchmark?: { p50?: number; p90?: number; p99?: number } | null,
+): { level: 'excellent' | 'good' | 'warning' | 'slow'; text: string } | null {
+  if (!benchmark || !actualMs) return null;
+  const p50 = benchmark.p50 ?? 0;
+  const p90 = benchmark.p90 ?? 0;
+  const p99 = benchmark.p99 ?? 0;
+  if (actualMs <= p50) return { level: 'excellent', text: '优秀（≤ P50）' };
+  if (actualMs <= p90) return { level: 'good', text: '良好（P50-P90）' };
+  if (actualMs <= p99) return { level: 'warning', text: '偏慢（P90-P99）' };
+  return { level: 'slow', text: '异常慢（> P99）' };
+}
+
+export const BENCHMARK_LEVEL_CLASS: Record<string, string> = {
+  excellent: 'text-emerald-400',
+  good: 'text-amber-400',
+  warning: 'text-amber-400',
+  slow: 'text-red-400',
+};

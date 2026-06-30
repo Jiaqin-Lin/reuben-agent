@@ -6,6 +6,7 @@ import {
   Trash,
   Sparkle,
   CircleNotch,
+  CaretDown,
 } from '@phosphor-icons/react';
 import { AdminPage } from '../../components/admin/AdminLayout';
 import { Drawer, Field, inputClass } from '../../components/admin/Drawer';
@@ -462,6 +463,89 @@ export function AdminKnowledgeRoutePage() {
   ).length;
   const pendingTopicCount = topics.filter((t) => !relations.some((r) => r.topicCode === t.topicCode)).length;
 
+  // ============ Scope Coverage / Profile Anomalies ============
+  const scopeCoverageRows = useMemo(() => {
+    return scopes.map((scope) => {
+      const scopeTopics = topics.filter((t) => t.scopeCode === scope.scopeCode);
+      const topicCodes = new Set(scopeTopics.map((t) => t.topicCode));
+      const scopeRelations = relations.filter((r) => topicCodes.has(r.topicCode));
+      const coveredTopicCodes = new Set(scopeRelations.map((r) => r.topicCode));
+      const scopeDocuments = documents.filter((d) => d.knowledgeScopeCode === scope.scopeCode);
+      const coverageRate = scopeTopics.length ? (coveredTopicCodes.size / scopeTopics.length) * 100 : 0;
+      return {
+        scopeCode: scope.scopeCode,
+        scopeName: scope.scopeName,
+        topicCount: scopeTopics.length,
+        coveredTopicCount: coveredTopicCodes.size,
+        pendingTopicCount: Math.max(0, scopeTopics.length - coveredTopicCodes.size),
+        documentCount: scopeDocuments.length,
+        coverageRate,
+        coverageRateText: `${coverageRate.toFixed(0)}%`,
+      };
+    });
+  }, [scopes, topics, relations, documents]);
+
+  const overallCoverageRateText = useMemo(() => {
+    if (!topics.length) return '0%';
+    const covered = new Set(relations.map((r) => r.topicCode));
+    return `${((covered.size / topics.length) * 100).toFixed(0)}%`;
+  }, [topics, relations]);
+
+  const profileAnomalyRows = useMemo(() => {
+    const scopeCodes = new Set(scopes.map((s) => s.scopeCode));
+    const linkedDocumentIds = new Set(relations.map((r) => String(r.documentId)));
+    return documents
+      .map((d) => {
+        const problems: string[] = [];
+        if (!d.knowledgeScopeCode && !d.knowledgeScopeName) problems.push('缺少知识范围');
+        if (d.knowledgeScopeCode && !scopeCodes.has(d.knowledgeScopeCode)) problems.push('范围未建节点');
+        if (!d.businessCategory) problems.push('缺少业务分类');
+        if (!d.documentTags) problems.push('缺少标签');
+        if (!linkedDocumentIds.has(String(d.documentId))) problems.push('未绑定主题');
+        const scopeText = d.knowledgeScopeName || d.knowledgeScopeCode || '未分配范围';
+        return {
+          documentId: d.documentId,
+          documentName: d.documentName,
+          scopeText,
+          problems,
+          tone: problems.length >= 3 ? 'danger' : 'warning',
+        };
+      })
+      .filter((row) => row.problems.length > 0);
+  }, [scopes, documents, relations]);
+
+  const [anomalyCollapsed, setAnomalyCollapsed] = useState(false);
+  const [coverageCollapsed, setCoverageCollapsed] = useState(false);
+  const [selectedRepairIds, setSelectedRepairIds] = useState<string[]>([]);
+  const allAnomaliesSelected =
+    profileAnomalyRows.length > 0 &&
+    profileAnomalyRows.every((row) => selectedRepairIds.includes(row.documentId));
+
+  const toggleRepair = (id: string) => {
+    setSelectedRepairIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+  const toggleAllAnomalies = () => {
+    if (allAnomaliesSelected) setSelectedRepairIds([]);
+    else setSelectedRepairIds(profileAnomalyRows.map((row) => row.documentId));
+  };
+
+  const handleBatchRepairAnomalies = async () => {
+    if (!selectedRepairIds.length) return;
+    if (!window.confirm(`确认批量重建 ${selectedRepairIds.length} 份异常文档画像吗？`)) return;
+    setBatchLoading(true);
+    try {
+      await batchRegenerateProfiles(selectedRepairIds.map((id) => Number(id)));
+      toast(`已触发 ${selectedRepairIds.length} 份画像重建`, 'success');
+      setSelectedRepairIds([]);
+    } catch (e) {
+      toast(errMsg(e, '批量重建失败'), 'error');
+    } finally {
+      setBatchLoading(false);
+    }
+  };
+
   return (
     <AdminPage>
       <div className="flex items-start justify-between gap-4 mb-5">
@@ -483,12 +567,172 @@ export function AdminKnowledgeRoutePage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <StatCard label="知识范围" value={scopes.length} hint="自动路由第一层收敛边界" />
         <StatCard label="知识主题" value={topics.length} hint="范围里的可回答单元" />
         <StatCard label="已保存关联" value={relations.length} hint="所有主题的文档关联数" />
         <StatCard label="未关联主题" value={pendingTopicCount} hint="还没绑定任何文档的主题" />
       </div>
+
+      {/* Scope Coverage 面板 */}
+      <section className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900/30 overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setCoverageCollapsed((v) => !v)}
+          className="w-full flex items-center justify-between gap-3 p-4 hover:bg-neutral-900/50 transition-colors"
+        >
+          <div className="text-left">
+            <p className="text-[11px] font-mono uppercase tracking-wider text-amber-400">Scope Coverage</p>
+            <h3 className="text-sm font-semibold text-neutral-200 mt-0.5">范围覆盖率统计</h3>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-300 text-[11px]">
+              整体覆盖率 {overallCoverageRateText}
+            </span>
+            <CaretDown className={cn('w-4 h-4 text-neutral-500 transition-transform', coverageCollapsed && 'rotate-180')} />
+          </div>
+        </button>
+        {!coverageCollapsed && (
+          <div className="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+            {scopeCoverageRows.length === 0 ? (
+              <p className="text-xs text-neutral-600 col-span-full py-4 text-center">还没有知识范围</p>
+            ) : (
+              scopeCoverageRows.map((row) => (
+                <div
+                  key={row.scopeCode}
+                  className={cn(
+                    'p-3 rounded-lg border',
+                    row.pendingTopicCount > 0
+                      ? 'border-amber-500/30 bg-amber-500/5'
+                      : 'border-neutral-800 bg-neutral-900/40',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <strong className="text-sm text-neutral-200 truncate block">{row.scopeName}</strong>
+                      <span className="text-[11px] text-neutral-600 font-mono">{row.scopeCode}</span>
+                    </div>
+                    <span className="text-sm font-semibold text-amber-400 tabular-nums shrink-0">
+                      {row.coverageRateText}
+                    </span>
+                  </div>
+                  <div className="h-1.5 mt-2 rounded-full bg-neutral-800 overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, row.coverageRate)}%` }}
+                    />
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px] text-neutral-500">
+                    <span>主题 {row.topicCount}</span>
+                    <span>已覆盖 {row.coveredTopicCount}</span>
+                    <span>未关联 {row.pendingTopicCount}</span>
+                    <span>文档 {row.documentCount}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* Profile Anomalies 面板 */}
+      {profileAnomalyRows.length > 0 && (
+        <section className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900/30 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setAnomalyCollapsed((v) => !v)}
+            className="w-full flex items-center justify-between gap-3 p-4 hover:bg-neutral-900/50 transition-colors"
+          >
+            <div className="text-left">
+              <p className="text-[11px] font-mono uppercase tracking-wider text-amber-400">Profile Anomalies</p>
+              <h3 className="text-sm font-semibold text-neutral-200 mt-0.5">
+                画像异常清单（{profileAnomalyRows.length}）
+              </h3>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleBatchRepairAnomalies();
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.stopPropagation();
+                    handleBatchRepairAnomalies();
+                  }
+                }}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors',
+                  selectedRepairIds.length
+                    ? 'border-amber-500/40 text-amber-400 hover:bg-amber-500/10'
+                    : 'border-neutral-700 text-neutral-500 cursor-not-allowed',
+                )}
+              >
+                {batchLoading ? '修复中...' : `批量重建 ${selectedRepairIds.length} 份`}
+              </span>
+              <CaretDown className={cn('w-4 h-4 text-neutral-500 transition-transform', anomalyCollapsed && 'rotate-180')} />
+            </div>
+          </button>
+          {!anomalyCollapsed && (
+            <div className="px-4 pb-4">
+              <label className="inline-flex items-center gap-2 mb-3 text-xs text-neutral-400 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={allAnomaliesSelected}
+                  onChange={toggleAllAnomalies}
+                  className="accent-amber-500"
+                />
+                全选异常
+              </label>
+              <div className="space-y-2">
+                {profileAnomalyRows.map((row) => (
+                  <div
+                    key={row.documentId}
+                    className={cn(
+                      'flex items-start gap-3 p-3 rounded-lg border',
+                      row.tone === 'danger'
+                        ? 'border-red-500/30 bg-red-500/5'
+                        : 'border-amber-500/30 bg-amber-500/5',
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedRepairIds.includes(row.documentId)}
+                      onChange={() => toggleRepair(row.documentId)}
+                      className="mt-1 accent-amber-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <strong className="text-sm text-neutral-200 truncate">{row.documentName}</strong>
+                        <span className="text-[11px] text-neutral-600 shrink-0">{row.scopeText}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {row.problems.map((p) => (
+                          <span key={p} className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 text-[11px]">
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const doc = documents.find((d) => d.documentId === row.documentId);
+                        if (doc) openProfileView(doc);
+                      }}
+                      className="shrink-0 px-2.5 py-1 rounded-lg border border-neutral-700 text-neutral-300 text-[11px] hover:bg-neutral-800"
+                    >
+                      查看
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       <nav className="flex gap-1 p-1 rounded-xl border border-neutral-800 bg-neutral-900/40 mb-4 overflow-x-auto">
         {TAB_LIST.map((tab) => {

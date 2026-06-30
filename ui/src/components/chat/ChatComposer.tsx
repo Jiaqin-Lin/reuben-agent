@@ -12,6 +12,8 @@ interface Props {
   documentOptions: KnowledgeDocumentOptionVo[];
   selectedDocumentId: string;
   onSelectDocument: (id: string) => void;
+  /** 最近一次助手路由解释的主候选文档名（自动模式下展示"最近主候选"pill）。 */
+  latestTopDocumentName?: string;
   isStreaming: boolean;
   isStopping: boolean;
   onSend: () => void;
@@ -32,6 +34,7 @@ export function ChatComposer({
   documentOptions,
   selectedDocumentId,
   onSelectDocument,
+  latestTopDocumentName,
   isStreaming,
   isStopping,
   onSend,
@@ -53,6 +56,9 @@ export function ChatComposer({
   const isDocumentMode = chatMode === ChatMode.DOCUMENT;
   const isAutoMode = chatMode === ChatMode.AUTO_DOCUMENT;
   const canSend = input.trim().length > 0 && (!isDocumentMode || Boolean(selectedDocumentId));
+
+  const selectedDocumentName =
+    documentOptions.find((d) => String(d.documentId) === selectedDocumentId)?.documentName || '';
 
   const placeholder = isAutoMode
     ? '请输入你的问题，系统会自动选择最相关的知识文档...'
@@ -109,7 +115,11 @@ export function ChatComposer({
                 </option>
               ))}
             </select>
-            {!selectedDocumentId && (
+            {selectedDocumentName ? (
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[11px]">
+                当前文档：{selectedDocumentName}
+              </span>
+            ) : (
               <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 text-[11px]">
                 请先选择一个文档再发送问题
               </span>
@@ -125,6 +135,11 @@ export function ChatComposer({
             <span className="px-2 py-0.5 rounded-full bg-neutral-800 text-neutral-400">
               候选选择只做预选，后续仍走稳定检索链路
             </span>
+            {latestTopDocumentName && (
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300">
+                最近主候选：{latestTopDocumentName}
+              </span>
+            )}
           </>
         )}
         {chatMode === ChatMode.OPEN_CHAT && (

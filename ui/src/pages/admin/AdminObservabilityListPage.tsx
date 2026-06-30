@@ -6,7 +6,7 @@ import { useToast } from '../../components/shared/Toast';
 import { ApiError } from '../../types/api';
 import { listSessions } from '../../api/chat';
 import type { ConversationSessionListVo, PageVo, ChatSessionListQuery } from '../../types/chat';
-import { chatModeLabel, turnStatusLabel, turnStatusTone, formatTime, truncate } from '../../lib/observability';
+import { chatModeLabel, turnStatusLabel, turnStatusTone, formatTime, truncate, paginationItems } from '../../lib/observability';
 import { cn } from '../../lib/cn';
 
 const STATUS_TONE_CLASS: Record<string, string> = {
@@ -216,18 +216,39 @@ export function AdminObservabilityListPage() {
           <span>
             第 {page.pageNo} / {page.totalPages} 页 · 共 {page.total} 条
           </span>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => goPage((page.pageNo ?? 1) - 1)}
               disabled={(page.pageNo ?? 1) <= 1 || loading}
-              className="px-3 py-1.5 rounded border border-neutral-700 hover:bg-neutral-800 disabled:opacity-40"
+              className="px-2.5 py-1.5 rounded border border-neutral-700 hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               上一页
             </button>
+            {paginationItems(page.pageNo ?? 1, page.totalPages ?? 1).map((item, i) =>
+              item === '...' ? (
+                <span key={`gap-${i}`} className="px-1.5 text-neutral-600">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={`p-${item}`}
+                  onClick={() => goPage(item)}
+                  disabled={loading}
+                  className={cn(
+                    'min-w-[32px] px-2 py-1.5 rounded border text-center tabular-nums',
+                    item === (page.pageNo ?? 1)
+                      ? 'border-amber-500/50 bg-amber-500/10 text-amber-400'
+                      : 'border-neutral-700 text-neutral-300 hover:bg-neutral-800',
+                  )}
+                >
+                  {item}
+                </button>
+              ),
+            )}
             <button
               onClick={() => goPage((page.pageNo ?? 1) + 1)}
               disabled={(page.pageNo ?? 1) >= (page.totalPages ?? 0) || loading}
-              className="px-3 py-1.5 rounded border border-neutral-700 hover:bg-neutral-800 disabled:opacity-40"
+              className="px-2.5 py-1.5 rounded border border-neutral-700 hover:bg-neutral-800 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               下一页
             </button>

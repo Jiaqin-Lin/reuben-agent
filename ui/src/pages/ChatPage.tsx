@@ -317,6 +317,14 @@ export function ChatPage() {
   }, [currentId, stop]);
 
   const latestAssistantId = [...displayMessages].reverse().find((m) => m.role === 'assistant')?.id;
+  const latestRouteTopDocumentName = (() => {
+    for (const msg of [...displayMessages].reverse()) {
+      if (msg.role === 'assistant' && msg.routeExplain?.topDocument) {
+        return msg.routeExplain.topDocument.documentName || String(msg.routeExplain.topDocument.documentId ?? '');
+      }
+    }
+    return '';
+  })();
   const activeSession = sessions.find((s) => s.conversationId === currentId);
   const activeTitle = activeSession?.title || activeSession?.latestTurn?.userPrompt || '新的对话';
 
@@ -575,6 +583,7 @@ export function ChatPage() {
           documentOptions={documentOptions}
           selectedDocumentId={selectedDocumentId}
           onSelectDocument={setSelectedDocumentId}
+          latestTopDocumentName={latestRouteTopDocumentName}
           isStreaming={isStreaming}
           isStopping={isStopping}
           onSend={() => sendMessage()}
