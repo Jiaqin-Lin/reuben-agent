@@ -157,6 +157,11 @@ public class ChatMemoryServiceImpl implements IChatMemoryService {
     }
 
     @Override
+    public ChatMemorySummary getSummaryEntity(String conversationId) {
+        return selectSummary(conversationId);
+    }
+
+    @Override
     public ChatSummaryPayload rebuildConversationSummary(String conversationId) {
         return doCompress(conversationId, true);
     }

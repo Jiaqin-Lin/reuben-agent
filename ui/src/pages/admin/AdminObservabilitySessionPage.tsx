@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowsClockwise, CircleNotch, Sparkle } from '@phosphor-icons/react';
 import { AdminPage } from '../../components/admin/AdminLayout';
 import { useToast } from '../../components/shared/Toast';
 import { ApiError } from '../../types/api';
 import { getSession, rebuildSummary } from '../../api/chat';
-import type { ConversationView, ChatTurnVo } from '../../types/chat';
+import type { ConversationView, ChatTurnVo, ChatDebugTrace } from '../../types/chat';
 import {
   chatModeLabel,
   turnStatusLabel,
@@ -14,6 +14,7 @@ import {
   formatTime,
   formatLatency,
   shortenId,
+  truncate,
 } from '../../lib/observability';
 import { cn } from '../../lib/cn';
 
@@ -162,12 +163,62 @@ export function AdminObservabilitySessionPage() {
             <h2 className="text-base font-semibold text-neutral-100">
               {session.selectedDocumentName || session.title || '未命名会话'}
             </h2>
+            <p className="text-xs text-neutral-500 mt-1">
+              这个页面只负责看整条会话里的每次问答，不展示单轮内部细节。先从下方轮次列表里找到你关心的那一轮，再进入专门的轮次详情页。
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
-              <MetaItem label="轮次数" value={String(session.turnCount ?? 0)} />
-              <MetaItem label="创建时间" value={formatTime(session.createTime)} />
+              <MetaItem label="助手轮次" value={String(turns.length)} />
+              <MetaItem label="会话消息数" value={String(session.messageCount ?? 0)} />
+              <MetaItem
+                label="长期摘要"
+                value={session.memorySummary?.compressionApplied ? '已形成' : '未形成'}
+              />
               <MetaItem label="最近更新" value={formatTime(session.updateTime)} />
-              <MetaItem label="选中文档" value={session.selectedDocumentName || '未绑定'} />
             </div>
+          </div>
+
+          {/* Session Context 区 */}
+          <div className="p-5 rounded-xl border border-neutral-800 bg-neutral-900/40 mb-4">
+            <div className="mb-3">
+              <span className="block text-[10px] font-mono uppercase tracking-wider text-neutral-500">Session Context</span>
+              <h3 className="text-sm font-semibold text-neutral-200 mt-0.5">会话级背景</h3>
+              <p className="text-xs text-neutral-500 mt-0.5">只解释整条会话的上下文、最近状态和记忆压缩，不进入某一轮内部链路。</p>
+            </div>
+            <dl className="space-y-0">
+              <ContextRow label="最近用户问题" value={session.latestUserMessage || '无'} />
+              <ContextRow label="最近助手回答" value={session.latestAssistantMessage ? truncate(session.latestAssistantMessage, 200) : '无'} />
+              <ContextRow
+                label="Checkpoint / 消息数"
+                value={`${session.checkpointCount ?? 0} / ${session.messageCount ?? 0}`}
+              />
+            </dl>
+
+            {session.memorySummary?.compressionApplied ? (
+              <div className="mt-4 pt-4 border-t border-neutral-800">
+                <div className="mb-2.5">
+                  <span className="block text-[10px] font-mono uppercase tracking-wider text-neutral-500">Memory</span>
+                  <h4 className="text-sm font-semibold text-neutral-200 mt-0.5">长期摘要快照</h4>
+                </div>
+                <div className="flex flex-wrap gap-1.5 mb-2.5">
+                  <span className="inline-flex px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 text-[11px] font-mono">
+                    covered {session.memorySummary.coveredExchangeCount ?? 0}
+                  </span>
+                  <span className="inline-flex px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 text-[11px] font-mono">
+                    version {session.memorySummary.summaryVersion ?? 0}
+                  </span>
+                  <span className="inline-flex px-2 py-0.5 rounded bg-neutral-800 text-neutral-300 text-[11px] font-mono">
+                    compress {session.memorySummary.compressionCount ?? 0}
+                  </span>
+                </div>
+                <pre className="m-0 p-3 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-300 text-xs whitespace-pre-wrap leading-relaxed font-mono">
+                  {session.memorySummary.summaryText || '无'}
+                </pre>
+              </div>
+            ) : (
+              <div className="mt-3 p-3 rounded-lg bg-neutral-900 border border-neutral-800 text-xs text-neutral-500">
+                当前会话还没有形成长期摘要。常见原因是轮次还不够，或者摘要预热尚未完成。
+              </div>
+            )}
           </div>
 
           <h3 className="text-sm font-semibold text-neutral-200 mb-3">轮次列表（{turns.length}）</h3>
@@ -201,6 +252,35 @@ function MetaItem({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ContextRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex gap-4 py-2.5 border-b border-neutral-800/60 last:border-b-0">
+      <dt className="shrink-0 w-32 text-xs text-neutral-500">{label}</dt>
+      <dd className="m-0 text-sm text-neutral-200 leading-relaxed break-words">{value}</dd>
+    </div>
+  );
+}
+
+function parseDebugTrace(raw?: string): ChatDebugTrace | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? (parsed as ChatDebugTrace) : null;
+  } catch {
+    return null;
+  }
+}
+
+function countJsonList(raw?: string): number {
+  if (!raw) return 0;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function TurnRow({
   turn,
   index,
@@ -213,6 +293,12 @@ function TurnRow({
   onClick: () => void;
 }) {
   const tone = turnStatusTone(turn.turnStatus);
+  const debugTrace = useMemo(() => parseDebugTrace(turn.debugTraceJson), [turn.debugTraceJson]);
+  const referenceCount = countJsonList(turn.sourceSnapshotList);
+  const recommendationCount = countJsonList(turn.followupSuggestionList);
+  const tokenCount = (debugTrace?.modelUsageTraces ?? []).reduce((sum, t) => sum + Number(t.totalTokens ?? 0), 0);
+  const costSum = (debugTrace?.modelUsageTraces ?? []).reduce((s, t) => s + Number(t.estimatedCost ?? 0), 0);
+  const costText = costSum > 0 ? `¥ ${costSum.toFixed(4)}` : '无';
   return (
     <button
       onClick={onClick}
@@ -234,9 +320,12 @@ function TurnRow({
       </div>
       <p className="text-sm text-neutral-200 line-clamp-1">问：{turn.userPrompt || '未记录问题'}</p>
       {turn.replyContent && <p className="text-xs text-neutral-500 mt-1 line-clamp-2">答：{turn.replyContent}</p>}
-      <div className="flex items-center gap-3 mt-2 text-[11px] text-neutral-600">
-        <span>首包 {formatLatency(turn.firstTokenLatencyMs ?? undefined)}</span>
-        <span>总耗时 {formatLatency(turn.totalLatencyMs ?? undefined)}</span>
+      <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-neutral-600">
+        <span>耗时 {formatLatency(turn.totalLatencyMs ?? undefined)}</span>
+        <span>引用 {referenceCount}</span>
+        <span>推荐 {recommendationCount}</span>
+        <span>Token {tokenCount || '无'}</span>
+        <span>成本 {costText}</span>
         <code className="font-mono ml-auto">{conversationId.slice(0, 10)}.../turn {turn.turnId}</code>
       </div>
     </button>

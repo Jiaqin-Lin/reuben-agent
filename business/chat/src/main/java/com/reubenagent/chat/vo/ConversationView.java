@@ -49,6 +49,21 @@ public class ConversationView {
     @Schema(description = "最近若干轮（用于前端渲染历史）")
     private List<ChatTurnVo> recentTurns;
 
+    @Schema(description = "最近用户问题")
+    private String latestUserMessage;
+
+    @Schema(description = "最近助手回答")
+    private String latestAssistantMessage;
+
+    @Schema(description = "消息数（用户+助手）")
+    private Integer messageCount;
+
+    @Schema(description = "ReAct 检查点数")
+    private Integer checkpointCount;
+
+    @Schema(description = "长期摘要快照")
+    private ConversationMemorySummaryVo memorySummary;
+
     @Schema(description = "创建时间")
     private Date createTime;
 

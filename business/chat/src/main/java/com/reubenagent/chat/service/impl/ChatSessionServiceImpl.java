@@ -24,6 +24,7 @@ import com.reubenagent.chat.vo.ChatResetVo;
 import com.reubenagent.chat.vo.ChatTraceStageView;
 import com.reubenagent.chat.vo.ChatTurnDetailView;
 import com.reubenagent.chat.vo.ChatTurnVo;
+import com.reubenagent.chat.vo.ConversationMemorySummaryVo;
 import com.reubenagent.chat.vo.ConversationSessionListVo;
 import com.reubenagent.chat.vo.ConversationView;
 import com.reubenagent.chat.vo.RetrievalResultView;
@@ -88,7 +89,7 @@ public class ChatSessionServiceImpl implements IChatSessionService {
 
         log.info("创建会话 → conversationId={} mode={} documentId={}",
                 conversationId, mode, dto.getSelectedDocumentId());
-        return assembleView(record, Collections.emptyList(), 0L);
+        return assembleView(record, Collections.emptyList(), 0L, false);
     }
 
     @Override
@@ -96,7 +97,7 @@ public class ChatSessionServiceImpl implements IChatSessionService {
         ConversationArchiveRecord record = requireConversation(conversationId);
         List<TurnArchiveRecord> recent = archiveStore.listRecentTurns(conversationId, RECENT_TURN_PREVIEW);
         long turnCount = archiveStore.countTurns(conversationId);
-        return assembleView(record, recent, turnCount);
+        return assembleView(record, recent, turnCount, true);
     }
 
     @Override
@@ -396,12 +397,13 @@ public class ChatSessionServiceImpl implements IChatSessionService {
     }
 
     private ConversationView assembleView(ConversationArchiveRecord record,
-                                          List<TurnArchiveRecord> recent, long turnCount) {
+                                          List<TurnArchiveRecord> recent, long turnCount,
+                                          boolean withMemoryContext) {
         List<ChatTurnVo> turnVos = recent.stream()
                 .map(this::toTurnVo)
                 .toList();
         ChatTurnVo latest = turnVos.isEmpty() ? null : turnVos.get(0);
-        return ConversationView.builder()
+        ConversationView.ConversationViewBuilder builder = ConversationView.builder()
                 .conversationId(record.getConversationId())
                 .chatMode(record.getChatMode())
                 .sessionStatus(record.getSessionStatus())
@@ -412,8 +414,74 @@ public class ChatSessionServiceImpl implements IChatSessionService {
                 .latestTurn(latest)
                 .recentTurns(turnVos)
                 .createTime(record.getCreateTime())
-                .updateTime(record.getUpdateTime())
-                .build();
+                .updateTime(record.getUpdateTime());
+
+        if (withMemoryContext) {
+            String latestUser = null;
+            String latestAssistant = null;
+            for (int i = recent.size() - 1; i >= 0; i--) {
+                TurnArchiveRecord t = recent.get(i);
+                if (latestUser == null && t.getUserPrompt() != null && !t.getUserPrompt().isBlank()) {
+                    latestUser = t.getUserPrompt();
+                }
+                if (latestAssistant == null && t.getReplyContent() != null && !t.getReplyContent().isBlank()) {
+                    latestAssistant = t.getReplyContent();
+                }
+                if (latestUser != null && latestAssistant != null) {
+                    break;
+                }
+            }
+            int messageCount = (int) recent.stream()
+                    .filter(t -> (t.getUserPrompt() != null && !t.getUserPrompt().isBlank())
+                            || (t.getReplyContent() != null && !t.getReplyContent().isBlank()))
+                    .count();
+            builder.latestUserMessage(latestUser)
+                    .latestAssistantMessage(latestAssistant)
+                    .messageCount(messageCount * 2)
+                    .checkpointCount(countCheckpoints(record.getConversationId()))
+                    .memorySummary(loadMemorySummaryVo(record.getConversationId()));
+        }
+        return builder.build();
+    }
+
+    /** 取会话 ReAct 检查点数（可选 Bean 缺失返回 0）。 */
+    private Integer countCheckpoints(String conversationId) {
+        ChatCheckpointManager checkpointManager = checkpointManagerProvider.getIfAvailable();
+        if (checkpointManager == null) {
+            return 0;
+        }
+        try {
+            return checkpointManager.list(conversationId).size();
+        } catch (Exception e) {
+            log.warn("统计会话检查点失败 → conversationId={} err={}", conversationId, e.getMessage());
+            return 0;
+        }
+    }
+
+    /** 取会话长期摘要快照（可选 Bean 缺失 / 无摘要返回 null）。 */
+    private ConversationMemorySummaryVo loadMemorySummaryVo(String conversationId) {
+        IChatMemoryService memoryService = memoryServiceProvider.getIfAvailable();
+        if (memoryService == null) {
+            return null;
+        }
+        try {
+            com.reubenagent.chat.entity.ChatMemorySummary entity = memoryService.getSummaryEntity(conversationId);
+            if (entity == null) {
+                return null;
+            }
+            com.reubenagent.chat.model.memory.ChatSummaryPayload payload = memoryService.getConversationSummary(conversationId);
+            boolean applied = entity.getSummaryText() != null && !entity.getSummaryText().isBlank();
+            return ConversationMemorySummaryVo.builder()
+                    .compressionApplied(applied)
+                    .coveredExchangeCount(entity.getCoveredTurnCount())
+                    .summaryVersion(entity.getSummaryVersion())
+                    .compressionCount(entity.getCompressionCount())
+                    .summaryText(payload == null ? entity.getSummaryText() : payload.getSummary())
+                    .build();
+        } catch (Exception e) {
+            log.warn("加载会话长期摘要失败 → conversationId={} err={}", conversationId, e.getMessage());
+            return null;
+        }
     }
 
     private ConversationSessionListVo toListVo(ConversationArchiveRecord record) {

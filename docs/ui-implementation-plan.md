@@ -6,7 +6,7 @@
 
 **状态**: ✅ Phase 0–9 全部完成；Phase 10（super-agent 功能缺口补齐）已识别，待实施。Chat 主体验、Admin 全量页面、响应式收尾均已交付；与 super-agent Vue 侧逐页对照后，文档详情页与观测轮次详情页存在功能级缺口。
 
-> **Phase 10 进度（2026-06-30）**：10.1 文档详情 + 10.2 文档列表已在 `c438020` 交付；本轮补齐 10.3 观测轮次详情（密度补齐）、10.5 仪表盘（服务端聚合 + 演示路径 + 最近文档）、10.6 知识路由（Scope Coverage + Profile Anomalies 面板）、10.8 观测列表（数字分页 + STOPPED 核对）、10.9 Chat（动态 scope pills）。10.4 / 10.7 待后续按需补。
+> **Phase 10 进度（2026-06-30）**：10.1 文档详情 + 10.2 文档列表已在 `c438020` 交付；10.3 观测轮次详情（密度补齐）、10.5 仪表盘（服务端聚合 + 演示路径 + 最近文档）、10.6 知识路由（Scope Coverage + Profile Anomalies 面板）、10.8 观测列表（数字分页 + STOPPED 核对）、10.9 Chat（动态 scope pills）、10.4 观测会话详情（Session Context + Memory + 轮次 meta）、10.7 路由追踪（可折叠 insight bar + 健康度 meter + 详细统计）已全部交付。Phase 10 完成。
 
 **技术栈**: React 19 + TypeScript + Vite 6 + Tailwind CSS 4 + Framer Motion (motion) + Phosphor Icons + React Router DOM v7
 
@@ -227,7 +227,7 @@
 
 **目标**: 逐页对照 super-agent Vue 源（`/Users/linjiaqin.5/Desktop/learn/super-agent/vue/src/`）补齐功能级缺口。Phase 0–9 已交付主框架与基础体验，但 Vue 侧多个重页面（文档详情 4804 行、观测轮次详情 1764 行、知识路由 2238 行）相比 React 实现存在显著功能密度差距，需补齐。
 
-> **完成情况**：✅ 10.1 / 10.2（`c438020`）；✅ 10.3 / 10.5 / 10.6 / 10.8 / 10.9（本轮）。⬜ 10.4 / 10.7 待补。
+> **完成情况**：✅ 10.1 / 10.2（`c438020`）；✅ 10.3 / 10.5 / 10.6 / 10.8 / 10.9；✅ 10.4 / 10.7（本轮）。Phase 10 全部完成。
 
 #### 10.1 文档详情页（最高优先级 — 功能闭环）
 
@@ -272,13 +272,15 @@ Vue `AdminObservabilityDetailView.vue` 1764 行 vs React `AdminObservabilityExch
 
 > 本轮实现 10.3.1 / 10.3.3 / 10.3.4 / 10.3.6 / 10.3.7 / 10.3.8：Header meta 补总Token/成本/引用推荐/模型调用次数（debugTraceJson 解析 modelUsageTraces）；通道性能对比网格（6 指标 + 子问题）；按子问题分组检索结果表（排名变化/原始分/RRF/Rerank/状态徽章）；Prompt 预览 System/User tab；时间线阶段内联基准对比徽章 + Trace Detail overlay 抽屉。10.3.2（轮次摘要区）/ 10.3.5（Evidence Budget）依赖后端 `debugTrace` 未持久化的 intentResolution / evidenceBudgetSnapshot 字段，留空态，待后端补持久化后再渲染。
 
-#### 10.4 观测-会话详情页
+#### 10.4 观测-会话详情页 ✅
 
 | # | 任务 | Vue 源位置 |
 |---|------|----------|
 | 10.4.1 | Session Context 区（最近用户问题/最近助手回答/Checkpoint vs 消息数） | `AdminObservabilitySessionView.vue:60-75` |
 | 10.4.2 | 记忆/长期摘要块（压缩 chips：covered/version/compress + 摘要文本 + 空态说明） | `:77-92` |
 | 10.4.3 | 轮次行 meta 补：引用数/推荐数/Token/成本（当前只有首包/总耗时） | `:131-148` |
+
+> 本轮实现 10.4.1 / 10.4.2 / 10.4.3：`AdminObservabilitySessionPage` 新增 Session Context 区（最近用户问题 / 最近助手回答 / Checkpoint vs 消息数 dl 列表）+ 记忆/长期摘要块（compressionApplied 守卫 + covered/version/compress chips + 摘要 pre 文本 + 未形成空态）；轮次行 meta 由"首包/总耗时"改为"耗时/引用/推荐/Token/成本"（引用/推荐走 sourceSnapshotList/followupSuggestionList JSON 计数，Token/成本走 debugTraceJson.modelUsageTraces 汇总）。会话 header 改为助手轮次/会话消息数/长期摘要/最近更新四指标。后端 `ConversationView` 新增 latestUserMessage/latestAssistantMessage/messageCount/checkpointCount/memorySummary 字段，`IChatMemoryService` 新增 `getSummaryEntity` 默认方法，`ChatSessionServiceImpl.assembleView` 在详情场景补这些字段。
 
 #### 10.5 仪表盘 ✅
 
@@ -299,12 +301,14 @@ Vue `AdminObservabilityDetailView.vue` 1764 行 vs React `AdminObservabilityExch
 
 > 本轮实现：`AdminKnowledgeRoutePage` 顶部新增可折叠 Scope Coverage 面板（每 scope 覆盖率进度条 + topic/covered/pending/document 计数 + 整体覆盖率 pill，pending>0 高亮）+ Profile Anomalies 面板（异常列表 + danger/warning tone + 逐行复选 + "全选异常" + 批量重建 N 份，复用现有 scopes/topics/documents/relations 计算，无需新 API）。
 
-#### 10.7 路由追踪页
+#### 10.7 路由追踪页 ✅
 
 | # | 任务 | Vue 源位置 |
 |---|------|----------|
 | 10.7.1 | 可折叠 insight bar 容器 | `AdminKnowledgeRouteTraceView.vue:22-65` |
 | 10.7.2 | 健康度进度条 meter + "详细统计" mini-stats grid（`summaryCards`） | `:22-65` |
+
+> 本轮实现 10.7.1 / 10.7.2：`AdminKnowledgeRouteTracePage` 顶部原静态 4 卡 + Top 文档分布整合为可折叠 insight bar（CaretDown 折叠箭头，默认展开），内含三栏：路由健康度（成功率/低置信率/候选文档均值 HealthMeter，带 tone 进度条 + 描述）、Top 候选文档分布（出现次数/均值/低置信徽章）、详细统计 mini-stats grid（11 项 summaryCards：总追踪量/本页 auto/本页 shadow/高置信/低置信或失败/shadow Top3 命中率/平均置信度/成功率/低置信率/均候选文档/扩范围次数）。复用现有 `summarizeRouteTraceRecords` / `buildTopDocumentDistribution`，无需新 API。
 
 #### 10.8 观测列表页 ✅
 

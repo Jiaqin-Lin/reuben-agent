@@ -40,4 +40,15 @@ public interface IChatMemoryService {
 
     /** 异步刷新摘要（若当前无在途刷新）。 */
     void refreshConversationSummaryAsync(String conversationId);
+
+    /**
+     * 取会话长期摘要实体（含覆盖率/版本/压缩次数等元数据），无摘要返回 null。
+     *
+     * <p>观测页展示记忆压缩状态用，默认实现返回 null，由记忆服务实现覆写。</p>
+     *
+     * @param conversationId 会话ID
+     */
+    default com.reubenagent.chat.entity.ChatMemorySummary getSummaryEntity(String conversationId) {
+        return null;
+    }
 }

@@ -74,6 +74,15 @@ export interface ChatTurnVo {
   createTime?: string;
 }
 
+/** 会话长期摘要快照（观测页展示记忆压缩状态）。 */
+export interface ConversationMemorySummaryVo {
+  compressionApplied?: boolean;
+  coveredExchangeCount?: number;
+  summaryVersion?: number;
+  compressionCount?: number;
+  summaryText?: string;
+}
+
 /** 会话详情 */
 export interface ConversationView {
   conversationId: string;
@@ -85,6 +94,11 @@ export interface ConversationView {
   turnCount: number;
   latestTurn?: ChatTurnVo;
   recentTurns?: ChatTurnVo[];
+  latestUserMessage?: string;
+  latestAssistantMessage?: string;
+  messageCount?: number;
+  checkpointCount?: number;
+  memorySummary?: ConversationMemorySummaryVo | null;
   createTime?: string;
   updateTime?: string;
 }

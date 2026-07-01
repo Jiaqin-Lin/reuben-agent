@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowsClockwise, CircleNotch, Eye } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretDown, CircleNotch, Eye } from '@phosphor-icons/react';
 import { AdminPage } from '../../components/admin/AdminLayout';
 import { useToast } from '../../components/shared/Toast';
 import { ApiError } from '../../types/api';
@@ -66,6 +66,7 @@ export function AdminKnowledgeRouteTracePage() {
     pageSize: 20,
   });
   const [page, setPage] = useState<PageVo<KnowledgeRouteTraceItemVo> | null>(null);
+  const [insightCollapsed, setInsightCollapsed] = useState(false);
 
   const load = useCallback(
     async (override?: KnowledgeRouteTraceQuery) => {
@@ -116,10 +117,28 @@ export function AdminKnowledgeRouteTracePage() {
   };
 
   const healthCards = [
-    { label: '成功率', value: summary.successRateText, tone: 'success' as const },
-    { label: '低置信率', value: summary.lowConfidenceRateText, tone: 'warning' as const },
-    { label: '平均置信度', value: summary.averageConfidenceText, tone: 'neutral' as const },
-    { label: 'shadow 命中率', value: summary.shadowHitRateText, tone: 'neutral' as const },
+    { label: '成功率', value: summary.successRateText, tone: 'success' as const, description: '越高说明自动候选越稳定' },
+    { label: '低置信率', value: summary.lowConfidenceRateText, tone: 'warning' as const, description: '越高说明范围、主题或画像还需补强' },
+    {
+      label: '候选文档均值',
+      value: summary.averageDocumentCountText,
+      tone: 'neutral' as const,
+      description: '高置信时通常接近 3，低置信时会放宽到 5',
+    },
+  ];
+
+  const summaryCards = [
+    { label: '总追踪量', value: String(page?.total ?? 0) },
+    { label: '本页 auto', value: String(summary.autoCount) },
+    { label: '本页 shadow', value: String(summary.shadowCount) },
+    { label: '高置信', value: String(summary.highConfidenceCount) },
+    { label: '低置信或失败', value: String(summary.lowConfidenceCount + summary.failedCount) },
+    { label: 'shadow Top3 命中率', value: summary.shadowHitRateText },
+    { label: '平均置信度', value: summary.averageConfidenceText },
+    { label: '成功率', value: summary.successRateText },
+    { label: '低置信率', value: summary.lowConfidenceRateText },
+    { label: '均候选文档', value: summary.averageDocumentCountText },
+    { label: '扩范围次数', value: String(summary.widenedCount) },
   ];
 
   return (
@@ -139,31 +158,84 @@ export function AdminKnowledgeRouteTracePage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
-        {healthCards.map((c) => (
-          <div key={c.label} className="p-4 rounded-xl border border-neutral-800 bg-neutral-900/40">
-            <p className="text-xs text-neutral-500">{c.label}</p>
-            <p className={cn('mt-1.5 text-xl font-semibold tabular-nums', TONE_BADGE[c.tone])}>{c.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {distribution.length > 0 && (
-        <div className="mb-4 p-4 rounded-xl border border-neutral-800 bg-neutral-900/30">
-          <h3 className="text-sm font-semibold text-neutral-200 mb-3">Top 候选文档分布（当前页）</h3>
-          <div className="space-y-1.5">
-            {distribution.map((d) => (
-              <div key={d.documentId} className="flex items-center justify-between gap-3 text-xs">
-                <span className="text-neutral-300 truncate">{d.documentName}</span>
-                <span className="shrink-0 text-neutral-500 font-mono">
-                  出现 {d.count} 次 · 均值 {d.averageConfidenceText}
-                  {d.lowConfidenceCount > 0 && <span className="text-amber-400 ml-2">{d.lowConfidenceCount} 次低置信</span>}
-                </span>
+      {/* 可折叠洞察区 */}
+      <div className="mb-4 rounded-xl border border-neutral-800 bg-neutral-900/30 overflow-hidden">
+        <button
+          onClick={() => setInsightCollapsed((v) => !v)}
+          className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-semibold text-neutral-200 hover:bg-neutral-900/60 transition-colors"
+        >
+          <span>路由洞察</span>
+          <CaretDown className={cn('w-4 h-4 text-neutral-500 transition-transform', insightCollapsed && '-rotate-90')} />
+        </button>
+        {!insightCollapsed && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 border-t border-neutral-800">
+            {/* 路由健康度 */}
+            <div className="p-4 border-b lg:border-b-0 lg:border-r border-neutral-800">
+              <div className="flex items-center justify-between mb-3">
+                <h5 className="text-xs font-semibold text-neutral-200">路由健康度</h5>
+                <span className="text-[11px] text-neutral-500">当前页样本</span>
               </div>
-            ))}
+              <div className="space-y-2.5">
+                {healthCards.map((c) => (
+                  <HealthMeter key={c.label} label={c.label} value={c.value} tone={c.tone} description={c.description} />
+                ))}
+              </div>
+            </div>
+
+            {/* Top 候选文档分布 */}
+            <div className="p-4 border-b lg:border-b-0 lg:border-r border-neutral-800">
+              <div className="flex items-center justify-between mb-3">
+                <h5 className="text-xs font-semibold text-neutral-200">Top 候选文档分布</h5>
+                <span className="text-[11px] text-neutral-500">{distribution.length} 个文档</span>
+              </div>
+              {distribution.length ? (
+                <div className="space-y-1.5">
+                  {distribution.map((d) => (
+                    <div
+                      key={d.documentId}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg border border-neutral-800 bg-neutral-900/40"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-xs text-neutral-200 truncate">{d.documentName}</p>
+                        <p className="text-[11px] text-neutral-500">
+                          出现 {d.count} 次 · 均值 {d.averageConfidenceText}
+                        </p>
+                      </div>
+                      <span
+                        className={cn(
+                          'shrink-0 inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold',
+                          d.lowConfidenceCount > 0
+                            ? 'bg-amber-500/15 text-amber-400'
+                            : 'bg-emerald-500/15 text-emerald-400',
+                        )}
+                      >
+                        {d.lowConfidenceCount > 0 ? `${d.lowConfidenceCount} 次低置信` : '全部成功'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-neutral-600">当前页还没有可统计的 Top 文档</p>
+              )}
+            </div>
+
+            {/* 详细统计 mini-stats grid */}
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h5 className="text-xs font-semibold text-neutral-200">详细统计</h5>
+              </div>
+              <div className="grid grid-cols-3 gap-2.5">
+                {summaryCards.map((c) => (
+                  <div key={c.label} className="flex flex-col gap-0.5">
+                    <strong className="text-sm text-neutral-100 tabular-nums">{c.value}</strong>
+                    <span className="text-[11px] text-neutral-500">{c.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-4">
         {/* 左侧：筛选 + 列表 */}
@@ -384,6 +456,44 @@ function SummaryCard({ label, value, hint }: { label: string; value: string; hin
       <p className="text-[11px] text-neutral-500">{label}</p>
       <p className="text-sm text-neutral-100 mt-1 font-medium break-words">{value}</p>
       <p className="text-[11px] text-neutral-600 mt-1 line-clamp-2">{hint}</p>
+    </div>
+  );
+}
+
+const HEALTH_FILL_CLASS: Record<string, string> = {
+  success: 'bg-emerald-500',
+  warning: 'bg-amber-500',
+  neutral: 'bg-sky-500',
+};
+
+function parsePercent(value: string): number {
+  const numeric = Number(String(value || '').replace('%', ''));
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function HealthMeter({
+  label,
+  value,
+  tone,
+  description,
+}: {
+  label: string;
+  value: string;
+  tone: 'success' | 'warning' | 'neutral';
+  description: string;
+}) {
+  const percent = parsePercent(value);
+  return (
+    <div className="p-2.5 rounded-lg border border-neutral-800 bg-neutral-900/40">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-neutral-400">{label}</span>
+        <strong className="text-xs text-neutral-100 tabular-nums">{value}</strong>
+      </div>
+      <div className="my-1.5 h-1.5 rounded-full bg-neutral-800 overflow-hidden">
+        <span className={cn('block h-full rounded-full', HEALTH_FILL_CLASS[tone])} style={{ width: `${percent}%` }} />
+      </div>
+      <small className="text-[11px] text-neutral-600">{description}</small>
     </div>
   );
 }
