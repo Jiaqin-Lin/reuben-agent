@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ArrowsClockwise, CircleNotch, CaretRight, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowsClockwise, CircleNotch, CaretRight, X, ChartBar } from '@phosphor-icons/react';
 import { AdminPage } from '../../components/admin/AdminLayout';
 import { useToast } from '../../components/shared/Toast';
 import { ApiError } from '../../types/api';
@@ -29,6 +29,9 @@ import {
   executionStateLabel,
   formatBenchmarkComparison,
   BENCHMARK_LEVEL_CLASS,
+  buildTraceStageInspector,
+  buildUsageStageInspector,
+  type StageInspector,
 } from '../../lib/observability';
 import { Markdown } from '../../components/shared/Markdown';
 import { cn } from '../../lib/cn';
@@ -342,7 +345,13 @@ export function AdminObservabilityExchangePage() {
       )}
 
       {overlayStage && (
-        <TraceOverlay stage={overlayStage} benchmark={findBenchmark(overlayStage.stageCode, overlayStage.executionMode)} onClose={() => setOverlayStage(null)} />
+        <TraceOverlay
+          stage={overlayStage}
+          benchmark={findBenchmark(overlayStage.stageCode, overlayStage.executionMode)}
+          exchange={turn}
+          debugTrace={debugTrace}
+          onClose={() => setOverlayStage(null)}
+        />
       )}
     </AdminPage>
   );
@@ -506,19 +515,63 @@ function BenchmarksCard({ benchmarks }: { benchmarks: StageBenchmarkView[] }) {
 function TraceOverlay({
   stage,
   benchmark,
+  exchange,
+  debugTrace,
   onClose,
 }: {
   stage: ChatTraceStageView;
   benchmark: { p50?: number; p90?: number; p99?: number } | null;
+  exchange?: {
+    userPrompt?: string;
+    replyContent?: string;
+    createTime?: string;
+  };
+  debugTrace?: ChatDebugTrace | null;
   onClose: () => void;
 }) {
   const tone = stageStateTone(stage.stageState);
   const comparison = formatBenchmarkComparison(stage.durationMs ?? undefined, benchmark);
+
+  // 阶段 Inspector：snapshot 缺失时退化为仅基础项 + summaryText，不报错
+  const inspector = useMemo<StageInspector | null>(
+    () =>
+      buildTraceStageInspector(stage, {
+        question: exchange?.userPrompt,
+        answer: exchange?.replyContent,
+        debugTrace: debugTrace ?? null,
+        createTime: exchange?.createTime,
+      }),
+    [stage, exchange, debugTrace],
+  );
+
+  const usageInspector = useMemo<StageInspector | null>(
+    () =>
+      buildUsageStageInspector({
+        question: exchange?.userPrompt,
+        answer: exchange?.replyContent,
+        debugTrace: debugTrace ?? null,
+        createTime: exchange?.createTime,
+      }),
+    [exchange, debugTrace],
+  );
+
+  // 有结构化内容时默认展示「阶段」tab；usage tab 仅在存在模型调用时可用
+  const hasStageDetails =
+    !!inspector &&
+    (inspector.summaryItems.length > 0 ||
+      inspector.listSections.length > 0 ||
+      inspector.tableSections.length > 0 ||
+      inspector.advancedItems.length > 0);
+  const [tab, setTab] = useState<'stage' | 'usage'>('stage');
+  useEffect(() => {
+    setTab('stage');
+  }, [stage.id]);
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full max-w-md h-full bg-neutral-950 border-l border-neutral-800 overflow-y-auto">
-        <div className="sticky top-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-950">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 px-4 py-3 border-b border-neutral-800 bg-neutral-950">
           <div>
             <p className="text-[11px] font-mono text-neutral-500">阶段 {stage.stageOrder}</p>
             <h3 className="text-sm font-semibold text-neutral-100">{stage.stageName}</h3>
@@ -556,6 +609,39 @@ function TraceOverlay({
               <p className="text-xs text-red-300 rounded-lg bg-red-500/10 border border-red-500/30 p-3 whitespace-pre-wrap">{stage.errorMessage}</p>
             </div>
           )}
+
+          {/* 结构化 Inspector：阶段 / 模型用量 双 tab */}
+          {(hasStageDetails || usageInspector) && (
+            <div className="pt-1">
+              <div className="flex gap-1 mb-3">
+                <button
+                  onClick={() => setTab('stage')}
+                  className={cn('px-3 py-1 rounded-lg text-xs', tab === 'stage' ? 'bg-amber-500/15 text-amber-400' : 'text-neutral-400 hover:bg-neutral-800')}
+                >
+                  阶段结构化
+                </button>
+                {usageInspector && (
+                  <button
+                    onClick={() => setTab('usage')}
+                    className={cn('inline-flex items-center gap-1 px-3 py-1 rounded-lg text-xs', tab === 'usage' ? 'bg-amber-500/15 text-amber-400' : 'text-neutral-400 hover:bg-neutral-800')}
+                  >
+                    <ChartBar className="w-3 h-3" />
+                    模型用量
+                  </button>
+                )}
+              </div>
+              {tab === 'stage' ? (
+                hasStageDetails && inspector ? (
+                  <InspectorBody inspector={inspector} />
+                ) : (
+                  <p className="text-xs text-neutral-600 py-2">该阶段未记录结构化快照（后端 snapshot 暂未持久化）。</p>
+                )
+              ) : (
+                usageInspector && <InspectorBody inspector={usageInspector} />
+              )}
+            </div>
+          )}
+
           {stage.traceId && (
             <div>
               <p className="text-[11px] text-neutral-500 mb-1">Trace ID</p>
@@ -564,6 +650,90 @@ function TraceOverlay({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** 渲染 Inspector 的四类区块：summaryItems / listSections / tableSections / advancedItems。 */
+function InspectorBody({ inspector }: { inspector: StageInspector }) {
+  return (
+    <div className="space-y-3">
+      {inspector.summaryItems.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {inspector.summaryItems.map((item) => (
+            <div key={item.label} className="rounded-lg bg-neutral-900/50 px-3 py-2">
+              <p className="text-[10px] text-neutral-500">{item.label}</p>
+              {item.code ? (
+                <pre className="text-[11px] text-neutral-300 font-mono mt-0.5 whitespace-pre-wrap break-all max-h-40 overflow-auto">{item.value}</pre>
+              ) : (
+                <p className="text-xs text-neutral-200 mt-0.5 break-words">{item.value}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {inspector.listSections.map((section) => (
+        <div key={section.label} className="rounded-lg bg-neutral-900/30 px-3 py-2">
+          <p className="text-[11px] text-neutral-400 mb-1.5">{section.label}</p>
+          {section.ordered ? (
+            <ol className="list-decimal list-inside space-y-0.5">
+              {section.items.map((entry, i) => (
+                <li key={i} className="text-xs text-neutral-300 break-words">{entry}</li>
+              ))}
+            </ol>
+          ) : (
+            <ul className="space-y-0.5">
+              {section.items.map((entry, i) => (
+                <li key={i} className="text-xs text-neutral-300 break-words flex gap-1.5">
+                  <span className="text-neutral-600 shrink-0">·</span>
+                  <span>{entry}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+
+      {inspector.tableSections.map((table) => (
+        <div key={table.label} className="rounded-lg bg-neutral-900/30 px-3 py-2">
+          <p className="text-[11px] text-neutral-400 mb-1.5">{table.label}</p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-neutral-500 border-b border-neutral-800">
+                  {table.columns.map((col) => (
+                    <th key={col} className="py-1.5 pr-3 font-medium whitespace-nowrap">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {table.rows.map((row, i) => (
+                  <tr key={i} className="border-b border-neutral-800/50">
+                    {row.cells.map((cell, j) => (
+                      <td key={j} className="py-1.5 pr-3 text-neutral-300 align-top">{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ))}
+
+      {inspector.advancedItems.length > 0 && (
+        <details className="rounded-lg bg-neutral-900/30 px-3 py-2">
+          <summary className="text-[11px] text-neutral-400 cursor-pointer hover:text-neutral-200">查看这个阶段的原始快照</summary>
+          <div className="mt-2 space-y-2">
+            {inspector.advancedItems.map((item) => (
+              <div key={item.label}>
+                <p className="text-[10px] text-neutral-500">{item.label}</p>
+                <pre className="text-[11px] text-neutral-300 font-mono mt-0.5 whitespace-pre-wrap break-all bg-neutral-950/60 rounded p-2 max-h-60 overflow-auto">{item.value}</pre>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

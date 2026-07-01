@@ -154,6 +154,8 @@ export interface ChatTraceStageView {
   durationMs?: number;
   summaryText?: string;
   errorMessage?: string;
+  /** 阶段结构化快照（reuben-agent 后端当前未持久化，留作容错；后端补齐后自动点亮 inspector） */
+  snapshot?: Record<string, unknown>;
 }
 
 /** 模型用量追踪（debugTraceJson.modelUsageTraces 元素）。 */
@@ -162,6 +164,11 @@ export interface ChatModelUsageTrace {
   completionTokens?: number;
   totalTokens?: number;
   estimatedCost?: number;
+  durationMs?: number;
+  stageName?: string;
+  provider?: string;
+  model?: string;
+  status?: string;
   [key: string]: unknown;
 }
 
@@ -174,6 +181,16 @@ export interface ChatDebugTrace {
   ragUserPrompt?: string;
   historySummary?: string;
   retrievalNotes?: string[];
+  limitStats?: {
+    modelCallsUsed?: number;
+    modelCallsRunLimit?: number;
+    modelCallsThreadLimit?: number;
+    toolCallsUsed?: number;
+    toolCallsRunLimit?: number;
+    toolCallsThreadLimit?: number;
+    limitTriggered?: boolean;
+    limitReason?: string;
+  } | null;
   [key: string]: unknown;
 }
 

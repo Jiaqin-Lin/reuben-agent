@@ -45,8 +45,10 @@ export function useDocumentWorkbench(docId: string): WorkbenchState {
       setPlans(planList ?? []);
       setError(null);
 
-      // 拉取构建任务快照：优先 latestIndexTaskId，回退 latestTaskId（构建类型）
-      const buildTaskId = doc.latestIndexTaskId ?? doc.latestTaskId;
+      // 拉取构建任务快照：仅认 latestIndexTaskId（索引构建任务）。
+      // 不能回退到 latestTaskId，否则未确认策略时会拿到解析任务快照，
+      // 被 computeBuildStageItems 误判成"4 步全完成"。
+      const buildTaskId = doc.latestIndexTaskId;
       if (buildTaskId) {
         try {
           const snap = await getTaskLogs(buildTaskId, 1, 50);

@@ -328,7 +328,27 @@ public class ChatSessionServiceImpl implements IChatSessionService {
                 .durationMs(s.getDurationMs())
                 .summaryText(s.getSummaryText())
                 .errorMessage(s.getErrorMessage())
+                .snapshot(parseSnapshot(s.getSnapshotJson()))
                 .build();
+    }
+
+    /** 将 snapshotJson 反序列化为 Map 供观测页 Inspector 渲染；空串或解析失败返回 null。 */
+    @SuppressWarnings("unchecked")
+    private java.util.Map<String, Object> parseSnapshot(String snapshotJson) {
+        if (snapshotJson == null || snapshotJson.isBlank()) {
+            return null;
+        }
+        try {
+            Object parsed = com.alibaba.fastjson.JSON.parse(snapshotJson);
+            if (parsed instanceof java.util.Map) {
+                return (java.util.Map<String, Object>) parsed;
+            }
+            return null;
+        } catch (Exception e) {
+            log.warn("阶段快照 JSON 解析失败 → jsonHead={} err={}",
+                    snapshotJson.length() > 60 ? snapshotJson.substring(0, 60) : snapshotJson, e.getMessage());
+            return null;
+        }
     }
 
     private RetrievalResultView toRetrievalView(com.reubenagent.chat.entity.ChatRetrievalResult r) {

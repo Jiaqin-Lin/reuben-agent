@@ -182,10 +182,13 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
         }
 
         // 阶段 4：对每个 parent seed 执行子管道 → child chunk 列表，组装 ParentBlockCandidate
+        // 子切分策略（recursive/semantic/llm/structure-child）内部不感知章节归属，
+        // 在此统一把 parent seed 的章节元数据透传给每个 child chunk。
         List<ParentBlockCandidate> blocks = new ArrayList<>();
         for (ChunkCandidate parentSeed : parentSeeds) {
             List<ChunkCandidate> childChunks = executeStepPipeline(
                     parentSeed.getText(), childSteps, structureNodes, "child");
+            inheritParentMetadata(childChunks, parentSeed);
 
             blocks.add(ParentBlockCandidate.builder()
                     .sectionPath(parentSeed.getSectionPath())
@@ -819,6 +822,32 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
     }
 
     // ======================== 辅助方法 ========================
+
+    /**
+     * 把父块（parent seed）的章节元数据透传给子 chunk。
+     *
+     * <p>子切分策略只关心文本拆分，产出的 ChunkCandidate 不带章节归属；
+     * 一个父块下的所有子 chunk 章节归属与父块一致，统一在此补齐。</p>
+     */
+    private void inheritParentMetadata(List<ChunkCandidate> childChunks, ChunkCandidate parentSeed) {
+        if (childChunks == null || childChunks.isEmpty() || parentSeed == null) {
+            return;
+        }
+        for (ChunkCandidate child : childChunks) {
+            if (child.getSectionPath() == null) {
+                child.setSectionPath(parentSeed.getSectionPath());
+            }
+            if (child.getStructureNodeId() == null) {
+                child.setStructureNodeId(parentSeed.getStructureNodeId());
+            }
+            if (child.getStructureNodeType() == null) {
+                child.setStructureNodeType(parentSeed.getStructureNodeType());
+            }
+            if (child.getCanonicalPath() == null) {
+                child.setCanonicalPath(parentSeed.getCanonicalPath());
+            }
+        }
+    }
 
     /**
      * ChunkCandidate 去重：基于 (sectionPath, text) 组合去重，过滤空文本。

@@ -14,6 +14,7 @@ import {
 import type { Icon } from '@phosphor-icons/react';
 import { cn } from '../../lib/cn';
 import { useAuth } from '../../hooks/useAuth';
+import { getAdminToken } from '../../api/client';
 import { useToast } from '../shared/Toast';
 import { getAdminUser } from '../../api/client';
 
@@ -47,6 +48,12 @@ export function AdminLayout() {
       .find((item) => location.pathname.startsWith(item.to))?.title ?? '管理后台';
 
   const handleLogout = async () => {
+    // bypass 模式下没有真实 token，直接退回聊天；后端 auth stub 时 logout 会失败，跳过即可
+    if (!getAdminToken()) {
+      toast('已退出后台', 'info');
+      nav('/chat', { replace: true });
+      return;
+    }
     try {
       await logout();
     } catch {

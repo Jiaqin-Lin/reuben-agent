@@ -86,7 +86,7 @@ public class DocumentController {
     }
 
     @Operation(summary = "查询文档详情")
-    @GetMapping("/{id}")
+    @GetMapping("/{id:[0-9]+}")
     public ApiResponse<DocumentDetailVo> getDocument(@PathVariable("id") Long id) {
         return ApiResponse.ok(documentManageService.getDocument(id));
     }

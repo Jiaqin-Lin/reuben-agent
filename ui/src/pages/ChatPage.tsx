@@ -70,6 +70,8 @@ export function ChatPage() {
 
   const currentAssistantIdRef = useRef('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  // 镜像 displayMessages，供 onComplete 异步回调读取最新值（避免闭包陈旧）
+  const displayMessagesRef = useRef<DisplayMessage[]>([]);
 
   const sortedSessions = [...sessions].sort((a, b) => {
     const ta = a.updateTime ? new Date(a.updateTime).getTime() : 0;
@@ -129,7 +131,9 @@ export function ChatPage() {
         setRouteLookup(explainLookup);
 
         setCurrentId(conversationId);
-        setDisplayMessages(mapTurnsToMessages(session.recentTurns ?? [], explainLookup));
+        const mapped = mapTurnsToMessages(session.recentTurns ?? [], explainLookup);
+        displayMessagesRef.current = mapped;
+        setDisplayMessages(mapped);
         setChatMode(session.chatMode ?? ChatMode.OPEN_CHAT);
         setSelectedDocumentId(session.selectedDocumentId ? String(session.selectedDocumentId) : '');
         await scrollToBottom();
@@ -146,6 +150,7 @@ export function ChatPage() {
   const startNewConversation = useCallback(() => {
     if (isStreaming) return;
     setCurrentId(createConversationId());
+    displayMessagesRef.current = [];
     setDisplayMessages([]);
     setInput('');
     setPageError('');
@@ -203,9 +208,11 @@ export function ChatPage() {
           msg.statusText = (event.content as string) || '';
         } else if (event.type === 'error') {
           msg.errorMessage = (event.content as string) || '对话执行失败';
+          msg.status = 'FAILED';
         }
         msg.updatedAt = new Date().toISOString();
         next[idx] = msg;
+        displayMessagesRef.current = next;
         return next;
       });
       scrollToBottom();
@@ -255,7 +262,11 @@ export function ChatPage() {
       currentAssistantIdRef.current = assistantId;
       setCurrentId(conversationId);
       setPageError('');
-      setDisplayMessages((prev) => [...prev, userMsg, assistantMsg]);
+      setDisplayMessages((prev) => {
+        const next = [...prev, userMsg, assistantMsg];
+        displayMessagesRef.current = next;
+        return next;
+      });
       if (!presetQuestion) setInput('');
 
       await scrollToBottom();
@@ -276,11 +287,13 @@ export function ChatPage() {
         {
           onEvent: applyStreamEvent,
           onError: (msg) => {
-            setDisplayMessages((prev) =>
-              prev.map((m) =>
+            setDisplayMessages((prev) => {
+              const next = prev.map((m) =>
                 m.id === assistantId ? { ...m, errorMessage: msg, status: 'FAILED' } : m,
-              ),
-            );
+              );
+              displayMessagesRef.current = next;
+              return next;
+            });
             setPageError(msg);
           },
           onComplete: async () => {
@@ -289,7 +302,16 @@ export function ChatPage() {
               const exists = (await listSessions({ pageNo: 1, pageSize: 100 })).records.some(
                 (s) => s.conversationId === conversationId,
               );
-              if (exists) await loadConversation(conversationId);
+              if (!exists) return;
+              // 失败回合（assistant 仍有 errorMessage 或无 content 且 FAILED）不覆盖本地状态，
+              // 否则会用后端未落库的空 turns 冲掉刚发出去的气泡，造成"闪一下回到欢迎页"。
+              const failed = displayMessagesRef.current.some(
+                (m) =>
+                  m.role === 'assistant' &&
+                  (m.errorMessage || (!m.content && m.status === 'FAILED')),
+              );
+              if (failed) return;
+              await loadConversation(conversationId);
             } catch {
               // 错误已落入页面提示
             }

@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.Date;
+import java.util.Map;
 
 /**
  * 追踪 stage 观测视图。
@@ -62,4 +63,11 @@ public class ChatTraceStageView {
 
     @Schema(description = "错误信息")
     private String errorMessage;
+
+    /**
+     * 阶段结构化快照 —— 由 snapshotJson 反序列化得到，供观测页 Inspector 渲染
+     * （子问题检索链路、证据门控决策、模型用量等）。无快照时为 null。
+     */
+    @Schema(description = "阶段结构化快照")
+    private Map<String, Object> snapshot;
 }
