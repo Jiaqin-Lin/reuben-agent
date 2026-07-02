@@ -133,9 +133,23 @@ public class ChatPreparationOrchestrator {
         ModeBranch branch = doModeBranch(plan, rewrite, traceRecorder);
         if (traceRecorder != null) {
             Map<String, Object> snapshot = new HashMap<>();
-            snapshot.put("executionMode", branch.executionMode().name());
+            snapshot.put("executionMode", branch.executionMode().getCode());
             snapshot.put("selectedDocumentId", branch.selectedDocumentId());
             snapshot.put("isClarification", branch.executionMode() == ExecutionMode.CLARIFICATION);
+            // 阶段：锚点信息（来自 DocumentNavigationDecision）
+            DocumentNavigationDecision nav = branch.navigationDecision();
+            if (nav != null) {
+                snapshot.put("originalQuestion", plan.getQuestion());
+                snapshot.put("anchorApplied", true);
+                if (nav.getStructureAnchor() != null) {
+                    snapshot.put("rootSectionCode", nav.getStructureAnchor().getRootSectionCode());
+                    snapshot.put("rootSectionTitle", nav.getStructureAnchor().getRootSectionTitle());
+                    snapshot.put("targetSectionHint", nav.getStructureAnchor().getTargetSectionHint());
+                }
+                if (nav.getRetrievalPlan() != null && nav.getRetrievalPlan().getSubQuestions() != null) {
+                    snapshot.put("retrievalSubQuestions", nav.getRetrievalPlan().getSubQuestions());
+                }
+            }
             traceRecorder.completeStage(routeStage, "路由完成", snapshot);
         }
         return branch;

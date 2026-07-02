@@ -296,10 +296,13 @@ public class KnowledgeManageServiceImpl implements IKnowledgeManageService {
 
     @Override
     public List<TopicDocumentRelationItemVo> listRelations(String topicCode) {
-        List<TopicDocumentRelation> relations = relationMapper.selectList(
-                new LambdaQueryWrapper<TopicDocumentRelation>()
-                        .eq(TopicDocumentRelation::getTopicCode, topicCode)
-                        .eq(TopicDocumentRelation::getIsDeleted, 0));
+        LambdaQueryWrapper<TopicDocumentRelation> wrapper = new LambdaQueryWrapper<TopicDocumentRelation>()
+                .eq(TopicDocumentRelation::getIsDeleted, 0);
+        // topicCode 为空时返回全量关联，供前端异常清单判定“文档是否被任意主题绑定”
+        if (topicCode != null && !topicCode.isBlank()) {
+            wrapper.eq(TopicDocumentRelation::getTopicCode, topicCode);
+        }
+        List<TopicDocumentRelation> relations = relationMapper.selectList(wrapper);
 
         // 批量查文档信息
         List<Long> docIds = relations.stream().map(TopicDocumentRelation::getDocumentId).distinct().toList();
@@ -401,6 +404,14 @@ public class KnowledgeManageServiceImpl implements IKnowledgeManageService {
                 .toList();
 
         return PageVo.of(page.getTotal(), dto.getPageNo(), dto.getPageSize(), records);
+    }
+
+    @Override
+    public void deleteRouteTrace(Long id) {
+        int deleted = traceMapper.deleteById(id);
+        if (deleted > 0) {
+            log.info("删除路由追踪记录 → id={}", id);
+        }
     }
 
     // ==================== 转换方法 ====================

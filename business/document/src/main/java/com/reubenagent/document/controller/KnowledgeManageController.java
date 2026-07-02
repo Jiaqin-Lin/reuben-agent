@@ -133,4 +133,11 @@ public class KnowledgeManageController {
             @Valid KnowledgeRouteTraceQueryDto dto) {
         return ApiResponse.ok(knowledgeManageService.pageQueryRouteTrace(dto));
     }
+
+    @PostMapping("/route/trace/delete")
+    @Operation(summary = "删除单条路由追踪记录（物理删除）")
+    public ApiResponse<Void> deleteRouteTrace(@RequestParam Long id) {
+        knowledgeManageService.deleteRouteTrace(id);
+        return ApiResponse.ok(null);
+    }
 }

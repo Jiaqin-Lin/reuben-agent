@@ -6,7 +6,7 @@ export interface DisplayMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
-  turnId?: number;
+  turnId?: string;
   thinkingSteps: string[];
   references: unknown[];
   recommendations: string[];

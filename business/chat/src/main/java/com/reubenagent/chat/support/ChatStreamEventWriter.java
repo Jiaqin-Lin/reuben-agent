@@ -72,7 +72,8 @@ public class ChatStreamEventWriter {
                 payload.put("conversationId", event.conversationId());
             }
             if (event.turnId() != null && event.turnId() > 0) {
-                payload.put("turnId", event.turnId());
+                // 雪花 ID 序列化为字符串，避免前端 JSON 解析丢精度
+                payload.put("turnId", event.turnId().toString());
             }
             if (event.count() != null) {
                 payload.put("count", event.count());

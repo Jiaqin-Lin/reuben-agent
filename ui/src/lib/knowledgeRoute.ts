@@ -78,9 +78,9 @@ export function formatRouteMode(value?: string): string {
 }
 
 export interface NormalizedRouteTrace {
-  id: number;
+  id: string;
   conversationId: string;
-  exchangeId: number | string;
+  exchangeId: string;
   question: string;
   rewriteQuestion: string;
   mode: string;
@@ -123,7 +123,7 @@ export function normalizeRouteTrace(record: KnowledgeRouteTraceItemVo = {} as Kn
   const mode = asString(record.mode);
 
   return {
-    id: record.id ?? 0,
+    id: record.id ?? '',
     conversationId: asString(record.conversationId),
     exchangeId: record.turnId ?? '',
     question: asString(record.question),

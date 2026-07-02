@@ -70,31 +70,31 @@ export function rebuildSummary(conversationId: string): Promise<void> {
 
 export function getTurnDetail(
   conversationId: string,
-  turnId: number,
+  turnId: string,
 ): Promise<ChatTurnDetailView> {
   return apiGet<ChatTurnDetailView>('/chat/exchange/detail', {
     conversationId,
-    turnId: String(turnId),
+    turnId,
   });
 }
 
 export function getRetrievalResults(
   conversationId: string,
-  turnId: number,
+  turnId: string,
 ): Promise<RetrievalResultView[]> {
   return apiGet<RetrievalResultView[]>('/chat/exchange/retrieval/results', {
     conversationId,
-    turnId: String(turnId),
+    turnId,
   });
 }
 
 export function getChannelExecutions(
   conversationId: string,
-  turnId: number,
+  turnId: string,
 ): Promise<ChannelExecutionView[]> {
   return apiGet<ChannelExecutionView[]>('/chat/exchange/channel/executions', {
     conversationId,
-    turnId: String(turnId),
+    turnId,
   });
 }
 

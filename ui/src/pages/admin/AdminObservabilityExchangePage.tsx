@@ -113,9 +113,9 @@ export function AdminObservabilityExchangePage() {
     setLoading(true);
     try {
       const [d, r, c, b] = await Promise.all([
-        getTurnDetail(conversationId, Number(exchangeId)),
-        getRetrievalResults(conversationId, Number(exchangeId)).catch(() => [] as RetrievalResultView[]),
-        getChannelExecutions(conversationId, Number(exchangeId)).catch(() => [] as ChannelExecutionView[]),
+        getTurnDetail(conversationId, exchangeId),
+        getRetrievalResults(conversationId, exchangeId).catch(() => [] as RetrievalResultView[]),
+        getChannelExecutions(conversationId, exchangeId).catch(() => [] as ChannelExecutionView[]),
         getStageBenchmarks().catch(() => [] as StageBenchmarkView[]),
       ]);
       setDetail(d);

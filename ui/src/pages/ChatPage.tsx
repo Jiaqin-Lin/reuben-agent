@@ -271,9 +271,9 @@ export function ChatPage() {
 
       await scrollToBottom();
 
-      const selectedDocNum = chatMode === ChatMode.DOCUMENT ? Number(selectedDocumentId) || null : null;
-      const selectedDocName = selectedDocNum
-        ? documentOptions.find((d) => d.documentId === selectedDocNum)?.documentName
+      const selectedDocId = chatMode === ChatMode.DOCUMENT ? selectedDocumentId || null : null;
+      const selectedDocName = selectedDocId
+        ? documentOptions.find((d) => d.documentId === selectedDocId)?.documentName
         : null;
 
       await start(
@@ -281,7 +281,7 @@ export function ChatPage() {
           question,
           conversationId,
           chatMode,
-          selectedDocumentId: selectedDocNum,
+          selectedDocumentId: selectedDocId,
           selectedDocumentName: selectedDocName ?? null,
         },
         {
@@ -589,7 +589,7 @@ export function ChatPage() {
                 key={msg.id}
                 message={msg}
                 isStreaming={isStreaming && msg.id === latestAssistantId}
-                showRecommendations={msg.id === latestAssistantId && !isStreaming}
+                showRecommendations={!isStreaming && msg.recommendations.length > 0}
                 onRecommend={(text) => sendMessage(text)}
               />
             ))}

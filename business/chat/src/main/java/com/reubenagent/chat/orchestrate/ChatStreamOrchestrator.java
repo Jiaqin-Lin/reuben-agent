@@ -295,39 +295,17 @@ public class ChatStreamOrchestrator {
             return;
         }
         ChatTraceRecorder recorder = taskInfo.getTraceRecorder();
-        // FINALIZE 的 executionMode 用真实模式名（非 ChatTurnStatus），避免 trace 表 execution_mode 恒 null
         String finalizeExecMode = resolveFinalExecutionModeName(taskInfo);
         ChatTraceRecorder.StageHandle finalizeStage = recorder == null ? null
                 : recorder.startStage(ChatTraceStageCode.FINALIZE, finalizeExecMode, "收尾落库", null);
 
-        // 阶段 1：emit 终止事件（先 emit done + complete，前端尽快收到结束信号；
-        // 推荐追问在落库前生成，作为最后一个事件在 done 之前 emit）
-        try {
-            if (status == ChatTurnStatus.FAILED && errorMessage != null) {
-                emit(taskInfo, eventWriter.error(errorMessage, taskInfo.getConversationId(), taskInfo.getTurnId()));
-            }
-            // 阶段：推荐追问（仅 COMPLETED 且答案非空时生成；失败/停止跳过）
-            if (status == ChatTurnStatus.COMPLETED) {
-                List<String> recommendations = generateRecommendations(taskInfo);
-                if (!recommendations.isEmpty()) {
-                    try {
-                        emit(taskInfo, eventWriter.recommendations(recommendations,
-                                taskInfo.getConversationId(), taskInfo.getTurnId()));
-                    } catch (Exception e) {
-                        log.warn("推荐追问事件 emit 失败 → conversationId={} err={}",
-                                taskInfo.getConversationId(), e.getMessage());
-                    }
-                    taskInfo.setFollowupSuggestions(recommendations);
-                }
-            }
-            emit(taskInfo, eventWriter.done(taskInfo.getConversationId(), taskInfo.getTurnId()));
-            SinkEmitHelper.emitComplete(taskInfo.getSink());
-        } catch (Exception e) {
-            log.warn("收尾 emit 失败 → conversationId={} turnId={}",
-                    taskInfo.getConversationId(), taskInfo.getTurnId(), e);
+        // 阶段 1：生成推荐追问（先不 emit，等落库完成后再发，避免前端 loadConversation 时 DB 还没写完）
+        if (status == ChatTurnStatus.COMPLETED) {
+            List<String> recommendations = generateRecommendations(taskInfo);
+            taskInfo.setFollowupSuggestions(recommendations);
         }
 
-        // 阶段 2：落 turn 行
+        // 阶段 2：落 turn 行（先落库，保证前端 onComplete → loadConversation 能读到完整数据）
         try {
             long totalLatency = System.currentTimeMillis() - taskInfo.getStartTime();
             TurnArchiveRecord patch = TurnArchiveRecord.builder()
@@ -344,7 +322,6 @@ public class ChatStreamOrchestrator {
                     .build();
             archiveStore.completeTurn(taskInfo.getConversationId(), taskInfo.getTurnId(), patch);
 
-            // 阶段：会话置回 IDLE
             archiveStore.saveConversation(ConversationArchiveRecord.builder()
                     .conversationId(taskInfo.getConversationId())
                     .sessionStatus(ChatSessionStatus.IDLE.getCode())
@@ -364,7 +341,31 @@ public class ChatStreamOrchestrator {
             }
         }
 
-        // 阶段 3：释放资源（一定执行）
+        // 阶段 3：emit 终止事件（落库完成后发，前端收到的后续加载能读到完整 turn）
+        try {
+            if (status == ChatTurnStatus.FAILED && errorMessage != null) {
+                emit(taskInfo, eventWriter.error(errorMessage, taskInfo.getConversationId(), taskInfo.getTurnId()));
+            }
+            if (status == ChatTurnStatus.COMPLETED) {
+                List<String> recommendations = taskInfo.getFollowupSuggestions();
+                if (recommendations != null && !recommendations.isEmpty()) {
+                    try {
+                        emit(taskInfo, eventWriter.recommendations(recommendations,
+                                taskInfo.getConversationId(), taskInfo.getTurnId()));
+                    } catch (Exception e) {
+                        log.warn("推荐追问事件 emit 失败 → conversationId={} err={}",
+                                taskInfo.getConversationId(), e.getMessage());
+                    }
+                }
+            }
+            emit(taskInfo, eventWriter.done(taskInfo.getConversationId(), taskInfo.getTurnId()));
+            SinkEmitHelper.emitComplete(taskInfo.getSink());
+        } catch (Exception e) {
+            log.warn("收尾 emit 失败 → conversationId={} turnId={}",
+                    taskInfo.getConversationId(), taskInfo.getTurnId(), e);
+        }
+
+        // 阶段 4：释放资源（一定执行）
         cleanup(taskInfo);
     }
 

@@ -1,5 +1,5 @@
 export interface KnowledgeScopeItemVo {
-  id: number;
+  id: string;
   scopeCode: string;
   scopeName: string;
   parentScopeCode?: string;
@@ -10,7 +10,7 @@ export interface KnowledgeScopeItemVo {
 }
 
 export interface KnowledgeTopicItemVo {
-  id: number;
+  id: string;
   topicCode: string;
   topicName: string;
   scopeCode: string;
@@ -23,9 +23,9 @@ export interface KnowledgeTopicItemVo {
 }
 
 export interface TopicDocumentRelationItemVo {
-  id: number;
+  id: string;
   topicCode: string;
-  documentId: number;
+  documentId: string;
   documentName?: string;
   scopeName?: string;
   relationScore?: number;
@@ -34,8 +34,8 @@ export interface TopicDocumentRelationItemVo {
 }
 
 export interface DocumentProfileVo {
-  id: number;
-  documentId: number;
+  id: string;
+  documentId: string;
   documentName?: string;
   profileVersion?: number;
   documentSummary?: string;
@@ -69,9 +69,9 @@ export const RouteStatus: Record<number, { label: string; tone: 'success' | 'war
 };
 
 export interface KnowledgeRouteTraceItemVo {
-  id: number;
+  id: string;
   conversationId: string;
-  turnId: number;
+  turnId: string;
   question?: string;
   rewriteQuestion?: string;
   mode?: string;
@@ -88,7 +88,7 @@ export interface KnowledgeRouteTraceItemVo {
 
 /** 路由候选条目（topScopesJson/topTopicsJson/topDocumentsJson 解析后元素）。 */
 export interface RouteCandidate {
-  documentId?: number;
+  documentId?: string;
   documentName?: string;
   scopeCode?: string;
   scopeName?: string;
@@ -100,7 +100,7 @@ export interface RouteCandidate {
 }
 
 export interface KnowledgeScopeSaveDto {
-  id?: number;
+  id?: string;
   scopeCode: string;
   scopeName: string;
   parentScopeCode?: string;
@@ -133,7 +133,7 @@ export interface KnowledgeTopicDeleteDto {
 
 export interface TopicDocumentRelationSaveDto {
   topicCode: string;
-  documentId: number;
+  documentId: string;
   relationScore?: number;
   relationSource?: string;
   reason?: string;
@@ -141,7 +141,7 @@ export interface TopicDocumentRelationSaveDto {
 
 export interface TopicDocumentRelationRemoveDto {
   topicCode: string;
-  documentId: number;
+  documentId: string;
 }
 
 export interface KnowledgeRouteTraceQuery {

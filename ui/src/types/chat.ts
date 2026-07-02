@@ -32,7 +32,7 @@ export interface ChatStreamDto {
   question: string;
   conversationId?: string;
   chatMode: number;
-  selectedDocumentId?: number | null;
+  selectedDocumentId?: string | null;
   selectedDocumentName?: string | null;
 }
 
@@ -41,14 +41,14 @@ export interface ChatStreamEvent {
   type: 'text' | 'thinking' | 'status' | 'error' | 'reference' | 'recommend' | 'done';
   content: unknown;
   conversationId?: string;
-  turnId?: number;
+  turnId?: string;
   timestamp?: number;
   count?: number;
 }
 
 /** 知识文档下拉项 */
 export interface KnowledgeDocumentOptionVo {
-  documentId: number;
+  documentId: string;
   documentName: string;
   fileType: number;
   indexStatus: number;
@@ -58,7 +58,7 @@ export interface KnowledgeDocumentOptionVo {
 
 /** 对话轮次 */
 export interface ChatTurnVo {
-  turnId: number;
+  turnId: string;
   conversationId: string;
   userPrompt: string;
   replyContent: string;
@@ -89,7 +89,7 @@ export interface ConversationView {
   chatMode: number;
   sessionStatus: number;
   title: string;
-  selectedDocumentId?: number;
+  selectedDocumentId?: string;
   selectedDocumentName?: string;
   turnCount: number;
   latestTurn?: ChatTurnVo;
@@ -109,7 +109,7 @@ export interface ConversationSessionListVo {
   chatMode: number;
   sessionStatus: number;
   title: string;
-  selectedDocumentId?: number;
+  selectedDocumentId?: string;
   selectedDocumentName?: string;
   turnCount: number;
   latestTurn?: ChatTurnVo;
@@ -140,9 +140,9 @@ export const StageState: Record<number, string> = {
 };
 
 export interface ChatTraceStageView {
-  id: number;
+  id: string;
   conversationId: string;
-  turnId: number;
+  turnId: string;
   traceId?: string;
   stageCode: number;
   stageName: string;
@@ -200,9 +200,9 @@ export interface ChatTurnDetailView {
 }
 
 export interface RetrievalResultView {
-  id: number;
+  id: string;
   conversationId: string;
-  turnId: number;
+  turnId: string;
   subQuestionIndex?: number;
   channelType: string;
   vectorRank?: number;
@@ -217,18 +217,18 @@ export interface RetrievalResultView {
   finalRank?: number;
   gatePassed?: number;
   isSelected?: number;
-  documentId: number;
+  documentId: string;
   documentName?: string;
-  chunkId: number;
+  chunkId: string;
   sectionPath?: string;
   chunkTextPreview?: string;
   createTime?: string;
 }
 
 export interface ChannelExecutionView {
-  id: number;
+  id: string;
   conversationId: string;
-  turnId: number;
+  turnId: string;
   subQuestionIndex?: number;
   channelType: string;
   executionState?: string;
@@ -264,7 +264,7 @@ export interface ChatRenameDto {
 
 export interface ChatSessionCreateDto {
   chatMode: number;
-  selectedDocumentId?: number;
+  selectedDocumentId?: string;
   selectedDocumentName?: string;
   title?: string;
 }

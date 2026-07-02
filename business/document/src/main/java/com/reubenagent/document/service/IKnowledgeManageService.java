@@ -51,4 +51,5 @@ public interface IKnowledgeManageService {
     // ============ Route Trace ============
 
     PageVo<KnowledgeRouteTraceItemVo> pageQueryRouteTrace(KnowledgeRouteTraceQueryDto dto);
+    void deleteRouteTrace(Long id);
 }

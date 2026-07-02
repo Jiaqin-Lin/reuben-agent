@@ -1,6 +1,5 @@
 package com.reubenagent.chat.service.impl;
 
-import com.reubenagent.chat.config.ChatConfiguration;
 import com.reubenagent.chat.config.ChatProperties;
 import com.reubenagent.chat.enums.ChatTraceStageCode;
 import com.reubenagent.chat.model.SearchReference;
@@ -12,26 +11,21 @@ import com.reubenagent.chat.support.ChatPromptTemplateService;
 import com.reubenagent.chat.support.ChatTexts;
 import com.reubenagent.chat.trace.ChatTraceRecorder;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * 推荐追问服务实现。
  *
  * <p>流程：构造 prompt（recent context + 引用摘要 + 当前问答）→ {@code observedChatModelService.callText}
- * （阻塞）→ {@code CompletableFuture.orTimeout} 超时保护 → JSON 数组解析（首个平衡数组）→ 去重截断。</p>
+ * （同步阻塞）→ JSON 数组解析（首个平衡数组）→ 去重截断。
+ * 同步调用保证 model usage trace 在 return 前已记录，不会因异步超时丢失。</p>
  *
- * <p>失败语义（修正 super-agent 问题 16）：不静默吞 —— warn + 落 RECOMMENDATION trace error，
- * 返回空集合让前端显示占位。</p>
+ * <p>失败语义：warn + 落 RECOMMENDATION trace error，返回空集合让前端显示占位。</p>
  *
  * @author reuben
  * @since 2026-06-27
@@ -44,18 +38,15 @@ public class ChatRecommendationServiceImpl implements IChatRecommendationService
     private final ObservedChatModelService observedChatModelService;
     private final ChatPromptTemplateService promptTemplateService;
     private final ChatJsonCodec jsonCodec;
-    private final Executor postProcessExecutor;
 
     public ChatRecommendationServiceImpl(ChatProperties properties,
                                          ObservedChatModelService observedChatModelService,
                                          ChatPromptTemplateService promptTemplateService,
-                                         ChatJsonCodec jsonCodec,
-                                         @Qualifier(ChatConfiguration.CHAT_POST_PROCESS_EXECUTOR) Executor postProcessExecutor) {
+                                         ChatJsonCodec jsonCodec) {
         this.properties = properties;
         this.observedChatModelService = observedChatModelService;
         this.promptTemplateService = promptTemplateService;
         this.jsonCodec = jsonCodec;
-        this.postProcessExecutor = postProcessExecutor;
     }
 
     @Override
@@ -72,26 +63,12 @@ public class ChatRecommendationServiceImpl implements IChatRecommendationService
 
         ChatTraceRecorder.StageHandle stage = startRecommendStage(traceRecorder);
         try {
-            List<String> result = CompletableFuture
-                    .supplyAsync(() -> doRecommend(question, answer, references, cfg, traceRecorder), postProcessExecutor)
-                    .orTimeout(Math.max(cfg.getTimeoutMs() == null ? 3000 : cfg.getTimeoutMs(), 1L), TimeUnit.MILLISECONDS)
-                    .exceptionally(error -> {
-                        // 阶段：超时 / 执行异常 → warn + 落 trace error，返回空集合
-                        if (isTimeout(error)) {
-                            log.warn("推荐追问超时 → conversationId={} timeoutMs={}",
-                                    traceRecorder == null ? null : traceRecorder.getConversationId(), cfg.getTimeoutMs());
-                        } else {
-                            log.warn("推荐追问失败 → conversationId={} err={}",
-                                    traceRecorder == null ? null : traceRecorder.getConversationId(),
-                                    error.getMessage());
-                        }
-                        return List.of();
-                    })
-                    .join();
+            // 阶段：同步调用 LLM，trace 在 callText 内部即时记录，不丢
+            List<String> result = doRecommend(question, answer, references, cfg, traceRecorder);
             completeRecommendStage(traceRecorder, stage, "生成 " + result.size() + " 条追问");
             return result;
         } catch (Exception e) {
-            log.warn("推荐追问编排异常 → err={}", e.getMessage());
+            log.warn("推荐追问失败 → err={}", e.getMessage());
             failRecommendStage(traceRecorder, stage, e.getMessage());
             return List.of();
         }
@@ -175,17 +152,6 @@ public class ChatRecommendationServiceImpl implements IChatRecommendationService
             }
         }
         return new ArrayList<>(unique);
-    }
-
-    private boolean isTimeout(Throwable error) {
-        Throwable cur = error;
-        while (cur != null) {
-            if (cur instanceof TimeoutException) {
-                return true;
-            }
-            cur = cur.getCause();
-        }
-        return false;
     }
 
     private ChatTraceRecorder.StageHandle startRecommendStage(ChatTraceRecorder recorder) {

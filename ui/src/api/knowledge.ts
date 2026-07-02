@@ -65,19 +65,19 @@ export function removeRelation(dto: TopicDocumentRelationRemoveDto): Promise<voi
 
 // ==================== Document Profile ====================
 
-export function getProfile(documentId: number): Promise<DocumentProfileVo> {
+export function getProfile(documentId: string): Promise<DocumentProfileVo> {
   return apiGet<DocumentProfileVo>('/document/knowledge/document/profile/detail', {
-    documentId: String(documentId),
+    documentId,
   });
 }
 
-export function regenerateProfile(documentId: number): Promise<DocumentProfileVo> {
+export function regenerateProfile(documentId: string): Promise<DocumentProfileVo> {
   return apiPost<DocumentProfileVo>(
     `/document/knowledge/document/profile/regenerate?documentId=${documentId}`,
   );
 }
 
-export function batchRegenerateProfiles(documentIds: number[]): Promise<DocumentProfileVo[]> {
+export function batchRegenerateProfiles(documentIds: string[]): Promise<DocumentProfileVo[]> {
   return apiPost<DocumentProfileVo[]>(
     '/document/knowledge/document/profile/batch-regenerate',
     documentIds,
@@ -97,4 +97,8 @@ export function pageQueryRouteTrace(
   if (query.mode) params.mode = query.mode;
   if (query.routeStatus != null) params.routeStatus = String(query.routeStatus);
   return apiGet<PageVo<KnowledgeRouteTraceItemVo>>('/document/knowledge/route/trace/page', params);
+}
+
+export function deleteRouteTrace(id: string): Promise<void> {
+  return apiPost<void>(`/document/knowledge/route/trace/delete?id=${id}`);
 }

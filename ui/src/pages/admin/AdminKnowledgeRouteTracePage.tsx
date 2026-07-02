@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowsClockwise, CaretDown, CircleNotch, Eye } from '@phosphor-icons/react';
+import { ArrowsClockwise, CaretDown, CircleNotch, Eye, Trash } from '@phosphor-icons/react';
 import { AdminPage } from '../../components/admin/AdminLayout';
 import { useToast } from '../../components/shared/Toast';
 import { ApiError } from '../../types/api';
-import { pageQueryRouteTrace } from '../../api/knowledge';
+import { pageQueryRouteTrace, deleteRouteTrace } from '../../api/knowledge';
 import type { KnowledgeRouteTraceItemVo, KnowledgeRouteTraceQuery } from '../../types/knowledge';
 import type { PageVo } from '../../types/chat';
 import {
@@ -102,6 +102,18 @@ export function AdminKnowledgeRouteTracePage() {
   const selected = useMemo(() => normalized.find((r) => r.id === selectedId) ?? null, [normalized, selectedId]);
 
   const applyFilters = () => load({ ...filters, pageNo: 1 });
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('确定要删除这条路由追踪记录吗？')) return;
+    try {
+      await deleteRouteTrace(id);
+      toast('已删除', 'success');
+      load();
+    } catch (e) {
+      const msg = e instanceof ApiError ? e.message : e instanceof Error ? e.message : '删除失败';
+      toast(msg, 'error');
+    }
+  };
 
   const resetFilters = () => {
     const cleared: KnowledgeRouteTraceQuery = { conversationId: '', mode: '', routeStatus: undefined, pageNo: 1, pageSize: 20 };
@@ -295,27 +307,38 @@ export function AdminKnowledgeRouteTracePage() {
               <div className="py-12 text-center text-neutral-600 text-sm">暂无追踪记录</div>
             ) : (
               normalized.map((item) => (
-                <button
+                <div
                   key={item.id}
-                  onClick={() => setSelectedId(item.id)}
                   className={cn(
-                    'w-full text-left p-3 rounded-lg border transition-colors',
+                    'flex items-start gap-2 w-full text-left rounded-lg border transition-colors',
                     selectedId === item.id
                       ? 'border-amber-500/40 bg-amber-500/5'
                       : 'border-neutral-800 bg-neutral-900/40 hover:bg-neutral-900/70',
                   )}
                 >
-                  <div className="flex flex-wrap gap-1.5 mb-1.5">
-                    <TraceChip tone="neutral">{item.modeLabel}</TraceChip>
-                    <TraceChip tone={item.statusTone}>{item.statusLabel}</TraceChip>
-                    <TraceChip tone={item.confidenceBand.tone}>{item.confidenceText}</TraceChip>
-                  </div>
-                  <p className="text-sm text-neutral-200 line-clamp-2">{item.question || '未记录问题'}</p>
-                  <div className="flex items-center justify-between mt-1.5 text-[11px] text-neutral-500">
-                    <span className="truncate">{primaryDocumentText(item)}</span>
-                    <span className="shrink-0 ml-2">{formatDateTime(item.createTimeNumber)}</span>
-                  </div>
-                </button>
+                  <button
+                    onClick={() => setSelectedId(item.id)}
+                    className="flex-1 p-3 text-left min-w-0"
+                  >
+                    <div className="flex flex-wrap gap-1.5 mb-1.5">
+                      <TraceChip tone="neutral">{item.modeLabel}</TraceChip>
+                      <TraceChip tone={item.statusTone}>{item.statusLabel}</TraceChip>
+                      <TraceChip tone={item.confidenceBand.tone}>{item.confidenceText}</TraceChip>
+                    </div>
+                    <p className="text-sm text-neutral-200 line-clamp-2">{item.question || '未记录问题'}</p>
+                    <div className="flex items-center justify-between mt-1.5 text-[11px] text-neutral-500">
+                      <span className="truncate">{primaryDocumentText(item)}</span>
+                      <span className="shrink-0 ml-2">{formatDateTime(item.createTimeNumber)}</span>
+                    </div>
+                  </button>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
+                    title="删除此记录"
+                    className="shrink-0 p-2 m-2 rounded-md text-neutral-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                  >
+                    <Trash className="w-4 h-4" />
+                  </button>
+                </div>
               ))
             )}
           </div>

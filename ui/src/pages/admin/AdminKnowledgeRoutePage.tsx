@@ -350,7 +350,7 @@ export function AdminKnowledgeRoutePage() {
   const loadProfileItem = async (documentId: string) => {
     setProfileLoading(true);
     try {
-      const p = await getProfile(Number(documentId));
+      const p = await getProfile(documentId);
       setProfile(p);
     } catch {
       setProfile(null);
@@ -362,7 +362,7 @@ export function AdminKnowledgeRoutePage() {
   const handleRegenerateProfile = async (documentId: string) => {
     setActionLoading(true);
     try {
-      await regenerateProfile(Number(documentId));
+      await regenerateProfile(documentId);
       toast('文档画像已重新生成', 'success');
       await loadProfileItem(documentId);
     } catch (e) {
@@ -376,7 +376,7 @@ export function AdminKnowledgeRoutePage() {
     if (!documents.length || !window.confirm(`确认批量重建 ${documents.length} 份文档画像吗？`)) return;
     setBatchLoading(true);
     try {
-      await batchRegenerateProfiles(documents.map((d) => Number(d.documentId)));
+      await batchRegenerateProfiles(documents.map((d) => d.documentId));
       toast(`已触发 ${documents.length} 份文档的画像重建`, 'success');
     } catch (e) {
       toast(errMsg(e, '批量重建失败'), 'error');
@@ -536,7 +536,7 @@ export function AdminKnowledgeRoutePage() {
     if (!window.confirm(`确认批量重建 ${selectedRepairIds.length} 份异常文档画像吗？`)) return;
     setBatchLoading(true);
     try {
-      await batchRegenerateProfiles(selectedRepairIds.map((id) => Number(id)));
+      await batchRegenerateProfiles(selectedRepairIds);
       toast(`已触发 ${selectedRepairIds.length} 份画像重建`, 'success');
       setSelectedRepairIds([]);
     } catch (e) {
@@ -1465,7 +1465,7 @@ function RelationDrawer({
   const isEdit = mode === 'edit';
   const [form, setForm] = useState<TopicDocumentRelationSaveDto>({
     topicCode: '',
-    documentId: 0,
+    documentId: '',
     relationScore: 0.9,
     relationSource: 'manual',
     reason: '',
@@ -1481,7 +1481,7 @@ function RelationDrawer({
         reason: target.reason ?? '',
       });
     } else {
-      setForm({ topicCode: '', documentId: 0, relationScore: 0.9, relationSource: 'manual', reason: '' });
+      setForm({ topicCode: '', documentId: '', relationScore: 0.9, relationSource: 'manual', reason: '' });
     }
   }, [target]);
 
@@ -1499,7 +1499,7 @@ function RelationDrawer({
         <Field label="文档">
           <select
             value={form.documentId || ''}
-            onChange={(e) => setForm({ ...form, documentId: Number(e.target.value) })}
+            onChange={(e) => setForm({ ...form, documentId: e.target.value })}
             className={inputClass}
           >
             <option value="">选择文档</option>
