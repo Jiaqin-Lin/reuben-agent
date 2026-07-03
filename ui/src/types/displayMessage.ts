@@ -27,7 +27,13 @@ export function mapTurnsToMessages(
   turns: ChatTurnVo[] = [],
   routeLookup: Record<string, ChatRouteExplain | null> = {},
 ): DisplayMessage[] {
-  return turns.flatMap((turn) => {
+  const sorted = [...turns].sort((a, b) => {
+    const ta = a.createTime ? new Date(a.createTime).getTime() : 0;
+    const tb = b.createTime ? new Date(b.createTime).getTime() : 0;
+    if (ta !== tb) return ta - tb;
+    return String(a.turnId ?? '').localeCompare(String(b.turnId ?? ''));
+  });
+  return sorted.flatMap((turn) => {
     const createdAt = turn.createTime;
     let recommendations: string[] = [];
     if (turn.followupSuggestionList) {

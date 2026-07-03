@@ -299,18 +299,25 @@ export function ChatPage() {
           onComplete: async () => {
             try {
               await refreshSessions();
-              const exists = (await listSessions({ pageNo: 1, pageSize: 100 })).records.some(
-                (s) => s.conversationId === conversationId,
-              );
-              if (!exists) return;
               // 失败回合（assistant 仍有 errorMessage 或无 content 且 FAILED）不覆盖本地状态，
               // 否则会用后端未落库的空 turns 冲掉刚发出去的气泡，造成"闪一下回到欢迎页"。
-              const failed = displayMessagesRef.current.some(
+              const current = displayMessagesRef.current;
+              const failed = current.some(
                 (m) =>
                   m.role === 'assistant' &&
                   (m.errorMessage || (!m.content && m.status === 'FAILED')),
               );
               if (failed) return;
+              // 本地已有完整且成功的回合时，不再用后端快照覆盖，避免顺序错乱 / 闪烁。
+              // 仅当本地状态丢失（如刷新页面后未加载、被外部清空）时才回拉。
+              const hasLocalTurns = current.some(
+                (m) => m.role === 'user' && m.turnId,
+              );
+              if (hasLocalTurns) return;
+              const exists = (await listSessions({ pageNo: 1, pageSize: 100 })).records.some(
+                (s) => s.conversationId === conversationId,
+              );
+              if (!exists) return;
               await loadConversation(conversationId);
             } catch {
               // 错误已落入页面提示

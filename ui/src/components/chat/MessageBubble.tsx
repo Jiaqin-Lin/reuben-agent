@@ -170,7 +170,7 @@ export function MessageBubble({ message, isStreaming, showRecommendations, onRec
         {isUser ? <User weight="regular" className="w-5 h-5" /> : <Sparkle weight="fill" className="w-5 h-5" />}
       </div>
 
-      <div className="min-w-0 flex-1">
+      <div className={cn('min-w-0 flex-1', isUser && 'flex flex-col items-end')}>
         <div className={cn('flex items-center justify-between gap-3 mb-2', isUser && 'flex-row-reverse')}>
           <div className={cn(isUser && 'text-right')}>
             <p className="text-sm font-semibold text-neutral-100">{isUser ? '你' : '智能助手'}</p>
