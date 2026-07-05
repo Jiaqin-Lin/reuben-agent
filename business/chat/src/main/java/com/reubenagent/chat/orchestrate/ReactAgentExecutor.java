@@ -242,7 +242,9 @@ public class ReactAgentExecutor implements ConversationExecutor {
         if (recorder == null) {
             return;
         }
-        recorder.completeStage(handle, "ReAct Agent 完成", null);
+        java.util.Map<String, Object> snapshot = new java.util.LinkedHashMap<>();
+        snapshot.put("usedTools", new java.util.ArrayList<>(taskInfo.getUsedTools()));
+        recorder.completeStage(handle, "ReAct Agent 完成", snapshot);
     }
 
     private void failStage(ChatTaskInfo taskInfo, ChatTraceRecorder.StageHandle handle, String errorMessage) {

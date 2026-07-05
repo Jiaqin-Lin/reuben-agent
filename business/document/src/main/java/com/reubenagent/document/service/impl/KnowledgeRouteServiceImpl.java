@@ -232,7 +232,7 @@ public class KnowledgeRouteServiceImpl implements KnowledgeRouteService {
 
         return rankByEntityType(ctx, scopes, "scope", config.getMaxScopeCandidates(),
                 s -> buildScopeRouteText(s), s -> s.getScopeCode(), s -> s.getScopeName(),
-                (s, score, reason) -> ScopeRouteCandidate.builder()
+                (s, score, rawScore, reason) -> ScopeRouteCandidate.builder()
                         .scopeCode(s.getScopeCode())
                         .scopeName(s.getScopeName())
                         .score(score)
@@ -259,7 +259,7 @@ public class KnowledgeRouteServiceImpl implements KnowledgeRouteService {
 
         return rankByEntityType(ctx, topics, "topic", config.getMaxTopicCandidates(),
                 t -> buildTopicRouteText(t), t -> t.getTopicCode(), t -> t.getTopicName(),
-                (t, score, reason) -> {
+                (t, score, rawScore, reason) -> {
                     // topic 级 scope 匹配加分
                     BigDecimal totalScore = score;
                     String finalReason = reason;
@@ -304,7 +304,7 @@ public class KnowledgeRouteServiceImpl implements KnowledgeRouteService {
 
         return rankByEntityType(ctx, docs, "document", config.getMaxDocumentCandidates(),
                 d -> buildDocumentRouteText(d), d -> d.getDocumentName(), d -> d.getDocumentName(),
-                (d, score, reason) -> {
+                (d, score, rawScore, reason) -> {
                     BigDecimal totalScore = score;
                     String finalReason = reason;
 
@@ -334,6 +334,7 @@ public class KnowledgeRouteServiceImpl implements KnowledgeRouteService {
                             .businessCategory(d.getBusinessCategory())
                             .documentTags(tags)
                             .score(totalScore)
+                            .rawScore(rawScore)
                             .reason(finalReason)
                             .build();
                 });
@@ -358,7 +359,7 @@ public class KnowledgeRouteServiceImpl implements KnowledgeRouteService {
 
     @FunctionalInterface
     interface CandidateBuilder<T, R> {
-        R build(T entity, BigDecimal score, String reason);
+        R build(T entity, BigDecimal score, BigDecimal rawScore, String reason);
     }
 
     private <T, R> List<R> rankByEntityType(RouteQueryContext ctx, List<T> entities,
@@ -430,11 +431,12 @@ public class KnowledgeRouteServiceImpl implements KnowledgeRouteService {
 
             double rawScore = semanticMainScore + lexicalAssist + keywordAssist;
             BigDecimal totalScore = BigDecimal.valueOf(rawScore).setScale(4, RoundingMode.HALF_UP);
+            BigDecimal rawScoreDecimal = BigDecimal.valueOf(rawScore).setScale(4, RoundingMode.HALF_UP);
 
             String reason = String.format("sem=%.2f lex=%.2f kw=%.1f raw=%.2f",
                     semanticMainScore, lexicalAssist, keywordAssist, rawScore);
 
-            candidates.add(candidateBuilder.build(entity, totalScore, reason));
+            candidates.add(candidateBuilder.build(entity, totalScore, rawScoreDecimal, reason));
         }
 
         // 4. 按分数降序 + 截断
@@ -463,9 +465,17 @@ public class KnowledgeRouteServiceImpl implements KnowledgeRouteService {
 
     private BigDecimal resolveConfidence(List<DocumentRouteCandidate> documents) {
         if (documents == null || documents.isEmpty()) return BigDecimal.ZERO;
-        if (documents.size() == 1) return BigDecimal.ONE;
 
         BigDecimal topScore = documents.get(0).getScore();
+
+        // 单文档也做归一化，避免盲目返回 1.0
+        if (documents.size() == 1) {
+            BigDecimal base = topScore.add(
+                    BigDecimal.valueOf(config.getConfidenceNormalizerBase()
+                            + config.getConfidenceNormalizerOffset()));
+            return topScore.divide(base, 4, RoundingMode.HALF_UP);
+        }
+
         BigDecimal secondScore = documents.get(1).getScore();
         BigDecimal base = topScore.add(secondScore)
                 .add(BigDecimal.valueOf(config.getConfidenceNormalizerOffset()))

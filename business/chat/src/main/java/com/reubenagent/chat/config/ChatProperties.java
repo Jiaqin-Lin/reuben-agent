@@ -179,6 +179,8 @@ public class ChatProperties {
         private Double clarifyConfidenceThreshold = 0.45;
         /** 候选文档 top1 与 top2 评分差 ≤ 此值视为模糊 → CLARIFICATION（RRF 分量级 ~0.001） */
         private Double clarifyTopScoreDiff = 0.001;
+        /** AUTO 模式原始语义分兜底：top 文档 rawScore 低于此值视为语义不相关，即使总分高也走 CLARIFICATION */
+        private Double clarifyMinRawScore = 15.0;
         /** 检索 topK 用于候选文档评分 */
         private Integer routeCandidateTopK = 5;
     }

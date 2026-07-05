@@ -188,10 +188,12 @@ public class ChatPreparationOrchestrator {
         ChatProperties.Orchestration cfg = properties.getOrchestration();
         boolean lowConfidence = candidate.confidence < cfg.getClarifyConfidenceThreshold();
         boolean ambiguous = (candidate.topScore - candidate.secondScore) <= cfg.getClarifyTopScoreDiff();
-        if (lowConfidence || ambiguous) {
-            String reason = lowConfidence ? "候选文档置信度低" : "候选文档评分接近";
+        boolean semanticallyIrrelevant = candidate.rawScore < cfg.getClarifyMinRawScore();
+        if (lowConfidence || ambiguous || semanticallyIrrelevant) {
+            String reason = semanticallyIrrelevant ? "候选文档语义相关度过低"
+                    : lowConfidence ? "候选文档置信度低" : "候选文档评分接近";
             return ModeBranch.clarification(plan,
-                    "您是想问关于哪一个文档的问题？",
+                    "没有找到与问题匹配的文档，请补充文档信息或选择开放式对话。",
                     List.of(candidate.documentName == null ? String.valueOf(candidate.documentId) : candidate.documentName),
                     reason);
         }
@@ -226,9 +228,10 @@ public class ChatPreparationOrchestrator {
                             secondScore = decision.getDocuments().get(1).getScore() == null ? 0.0
                                     : decision.getDocuments().get(1).getScore().doubleValue();
                         }
+                        double rawScore = top.getRawScore() == null ? 0.0 : top.getRawScore().doubleValue();
                         return new RouteCandidate(top.getDocumentId(), top.getDocumentName(),
                                 top.getScore() == null ? 0.0 : top.getScore().doubleValue(),
-                                secondScore, confidence, decision);
+                                secondScore, confidence, rawScore, decision);
                     }
                 }
             } catch (Exception e) {
@@ -269,7 +272,8 @@ public class ChatPreparationOrchestrator {
                     ? ranked.get(1).getValue().stream().max(Double::compare).orElse(0.0)
                     : 0.0;
             double confidence = ranked.size() == 1 ? 1.0 : topScore / (topScore + secondScore + 1e-6);
-            return new RouteCandidate(top.getKey(), docNames.get(top.getKey()), topScore, secondScore, confidence, null);
+            // RAG 回退路径无独立 rawScore，用 topScore 充当（已是纯检索分，不含 scope/relation 加成）
+            return new RouteCandidate(top.getKey(), docNames.get(top.getKey()), topScore, secondScore, confidence, topScore, null);
         } catch (Exception e) {
             log.warn("知识路由 RAG 回退失败，跳过 AUTO_DOCUMENT 候选评分 → err={}", e.getMessage());
             return null;
@@ -417,7 +421,7 @@ public class ChatPreparationOrchestrator {
     }
 
     private record RouteCandidate(Long documentId, String documentName, double topScore,
-                                  double secondScore, double confidence,
+                                  double secondScore, double confidence, double rawScore,
                                   KnowledgeRouteDecision decision) {
     }
 }

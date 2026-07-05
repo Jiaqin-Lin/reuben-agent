@@ -316,7 +316,7 @@ public class ChatStreamOrchestrator {
                     .sourceSnapshotList(jsonCodec.toJson(taskInfo.getReferences()))
                     .toolTraceList(jsonCodec.toJson(taskInfo.getThinkingSteps()))
                     .followupSuggestionList(jsonCodec.toListJson(taskInfo.getFollowupSuggestions()))
-                    .debugTraceJson(buildDebugTraceJson(taskInfo.getTraceRecorder()))
+                    .debugTraceJson(buildDebugTraceJson(taskInfo))
                     .firstTokenLatencyMs(toNullable(taskInfo.getFirstTokenLatencyMs().get()))
                     .totalLatencyMs(totalLatency)
                     .build();
@@ -479,20 +479,59 @@ public class ChatStreamOrchestrator {
         return ExecutionMode.REACT_AGENT.name();
     }
 
-    /** 序列化本轮模型调用追踪到 turn.debug_trace_json（含 modelUsageTraces），无 recorder/无追踪返回 null。 */
-    private String buildDebugTraceJson(ChatTraceRecorder recorder) {
-        if (recorder == null) {
+    /** 序列化本轮调试追踪到 turn.debug_trace_json（含 modelUsageTraces / toolTraces / limitStats）。 */
+    private String buildDebugTraceJson(ChatTaskInfo taskInfo) {
+        ChatTraceRecorder recorder = taskInfo.getTraceRecorder();
+        java.util.List<com.reubenagent.chat.model.debug.ChatModelUsageTrace> modelTraces =
+                recorder != null ? recorder.snapshotModelUsageTraces() : java.util.List.of();
+
+        java.util.List<com.reubenagent.chat.model.debug.ChatToolTrace> toolTraces = buildToolTraces(taskInfo);
+
+        com.reubenagent.chat.model.debug.ChatLimitStats limitStats = buildLimitStats(taskInfo, modelTraces);
+
+        if (modelTraces.isEmpty() && toolTraces.isEmpty() && limitStats == null) {
             return null;
         }
-        java.util.List<com.reubenagent.chat.model.debug.ChatModelUsageTrace> traces =
-                recorder.snapshotModelUsageTraces();
-        if (traces == null || traces.isEmpty()) {
-            return null;
-        }
+
         com.reubenagent.chat.model.debug.ChatDebugTrace debug = com.reubenagent.chat.model.debug.ChatDebugTrace.builder()
-                .modelUsageTraces(traces)
+                .modelUsageTraces(modelTraces)
+                .toolTraces(toolTraces)
+                .limitStats(limitStats)
                 .build();
         return jsonCodec.toJson(debug);
+    }
+
+    private java.util.List<com.reubenagent.chat.model.debug.ChatToolTrace> buildToolTraces(ChatTaskInfo taskInfo) {
+        java.util.List<com.reubenagent.chat.model.debug.ChatToolTrace> list = new java.util.ArrayList<>();
+        java.util.Set<String> usedTools = taskInfo.getUsedTools();
+        if (usedTools != null && !usedTools.isEmpty()) {
+            for (String toolName : usedTools) {
+                list.add(com.reubenagent.chat.model.debug.ChatToolTrace.builder()
+                        .toolName(toolName)
+                        .status(com.reubenagent.chat.enums.ChatToolStatus.SUCCESS)
+                        .build());
+            }
+        }
+        return list;
+    }
+
+    private com.reubenagent.chat.model.debug.ChatLimitStats buildLimitStats(
+            ChatTaskInfo taskInfo,
+            java.util.List<com.reubenagent.chat.model.debug.ChatModelUsageTrace> modelTraces) {
+        ChatProperties.Agent cfg = properties.getAgent();
+        if (cfg == null) {
+            return null;
+        }
+        java.util.Set<String> usedTools = taskInfo.getUsedTools();
+        int toolCallsUsed = usedTools != null ? usedTools.size() : 0;
+        return com.reubenagent.chat.model.debug.ChatLimitStats.builder()
+                .modelCallsUsed(modelTraces.size())
+                .modelCallsRunLimit(cfg.getMaxModelCallsPerRun())
+                .modelCallsThreadLimit(cfg.getMaxModelCallsPerThread())
+                .toolCallsUsed(toolCallsUsed)
+                .toolCallsRunLimit(cfg.getMaxToolCallsPerRun())
+                .toolCallsThreadLimit(cfg.getMaxToolCallsPerThread())
+                .build();
     }
 
     /** 生成推荐追问：把 taskInfo.references 转成 SearchReference 列表交给 recommendationService。 */

@@ -36,9 +36,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import javax.sql.DataSource;
 /**
  * 会话业务编排实现。
  *
@@ -60,6 +62,7 @@ public class ChatSessionServiceImpl implements IChatSessionService {
     private final ChatStageBenchmarkService benchmarkService;
     private final com.reubenagent.chat.mapper.IChatRetrievalResultMapper retrievalResultMapper;
     private final com.reubenagent.chat.mapper.IChatChannelExecutionMapper channelExecutionMapper;
+    private final DataSource dataSource;
 
     @Override
     public ConversationView createConversation(ChatSessionCreateDto dto) {
@@ -419,10 +422,13 @@ public class ChatSessionServiceImpl implements IChatSessionService {
     private ConversationView assembleView(ConversationArchiveRecord record,
                                           List<TurnArchiveRecord> recent, long turnCount,
                                           boolean withMemoryContext) {
-        List<ChatTurnVo> turnVos = recent.stream()
+        // listRecentTurns 返回 id 倒序（最新在前），观测页/详情按时间正序展示 → 反转
+        List<TurnArchiveRecord> ascending = new ArrayList<>(recent);
+        Collections.reverse(ascending);
+        List<ChatTurnVo> turnVos = ascending.stream()
                 .map(this::toTurnVo)
                 .toList();
-        ChatTurnVo latest = turnVos.isEmpty() ? null : turnVos.get(0);
+        ChatTurnVo latest = turnVos.isEmpty() ? null : turnVos.get(turnVos.size() - 1);
         ConversationView.ConversationViewBuilder builder = ConversationView.builder()
                 .conversationId(record.getConversationId())
                 .chatMode(record.getChatMode())
@@ -464,16 +470,22 @@ public class ChatSessionServiceImpl implements IChatSessionService {
         return builder.build();
     }
 
-    /** 取会话 ReAct 检查点数（可选 Bean 缺失返回 0）。 */
+    /** 会话 ReAct 检查点数，从 Alibaba MysqlSaver 管理的 GRAPH_CHECKPOINT 读取。 */
     private Integer countCheckpoints(String conversationId) {
-        ChatCheckpointManager checkpointManager = checkpointManagerProvider.getIfAvailable();
-        if (checkpointManager == null) {
-            return 0;
-        }
         try {
-            return checkpointManager.list(conversationId).size();
+            org.springframework.jdbc.core.JdbcTemplate jdbc =
+                    new org.springframework.jdbc.core.JdbcTemplate(dataSource);
+            String sql = """
+                    SELECT COUNT(*)
+                    FROM GRAPH_CHECKPOINT c
+                    JOIN GRAPH_THREAD t ON c.thread_id = t.thread_id
+                    WHERE t.thread_name = ?
+                    """;
+            Integer count = jdbc.queryForObject(sql, Integer.class, conversationId);
+            return count != null ? count : 0;
         } catch (Exception e) {
-            log.warn("统计会话检查点失败 → conversationId={} err={}", conversationId, e.getMessage());
+            log.warn("统计 GRAPH_CHECKPOINT 失败 → conversationId={} err={}",
+                    conversationId, e.getMessage());
             return 0;
         }
     }

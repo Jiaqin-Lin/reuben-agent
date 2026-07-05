@@ -192,6 +192,8 @@ public class DocumentProperties {
         private double confidenceNormalizerOffset = 5.0;
         /** 低置信度阈值 */
         private double lowConfidenceThreshold = 0.55;
+        /** AUTO 模式原始语义分兜底阈值：top 文档 rawScore 低于此值视为语义不相关，即使总分高也走澄清 */
+        private double minRawSemanticScore = 15.0;
         /** 语义分批大小 */
         private int batchEmbeddingSize = 10;
         /** scope 候选上限 */

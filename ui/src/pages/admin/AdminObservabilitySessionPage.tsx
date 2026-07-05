@@ -226,11 +226,11 @@ export function AdminObservabilitySessionPage() {
             <div className="py-12 text-center text-neutral-600 text-sm">当前会话还没有助手轮次</div>
           ) : (
             <div className="space-y-2">
-              {[...turns].reverse().map((turn, idx) => (
+              {[...turns].map((turn, idx) => (
                 <TurnRow
                   key={turn.turnId}
                   turn={turn}
-                  index={turns.length - idx}
+                  index={idx + 1}
                   conversationId={session.conversationId}
                   onClick={() => nav(`/admin/observability/${session.conversationId}/exchanges/${turn.turnId}`)}
                 />

@@ -115,7 +115,7 @@ export interface KnowledgeScopeDeleteDto {
 }
 
 export interface KnowledgeTopicSaveDto {
-  id?: number;
+  id?: string;
   topicCode: string;
   topicName: string;
   scopeCode: string;

@@ -37,8 +37,11 @@ public class DocumentRouteCandidate {
     /** 文档标签 */
     private List<String> documentTags;
 
-    /** 综合得分 */
+    /** 综合得分（含 scope/relation 加成） */
     private BigDecimal score;
+
+    /** 原始语义分（sem+lex+kw，不含 scope/relation 加成），用于低相关度兜底 */
+    private BigDecimal rawScore;
 
     /** 得分原因 */
     private String reason;

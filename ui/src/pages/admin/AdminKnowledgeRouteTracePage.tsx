@@ -56,7 +56,7 @@ export function AdminKnowledgeRouteTracePage() {
   const { toast } = useToast();
   const [records, setRecords] = useState<KnowledgeRouteTraceItemVo[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const [filters, setFilters] = useState<KnowledgeRouteTraceQuery>({
     conversationId: '',
