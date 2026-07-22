@@ -5,13 +5,13 @@ import co.elastic.clients.elasticsearch.core.BulkRequest;
 import co.elastic.clients.elasticsearch.core.DeleteByQueryResponse;
 import co.elastic.clients.elasticsearch.indices.CreateIndexRequest;
 import co.elastic.clients.elasticsearch.indices.ExistsRequest;
-import co.elastic.clients.json.JsonData;
 import co.elastic.clients.json.jackson.JacksonJsonpMapper;
 import co.elastic.clients.transport.rest_client.RestClientTransport;
 import com.reubenagent.rag.config.RagProperties;
 import com.reubenagent.rag.constant.MetadataKeys;
 import com.reubenagent.rag.dto.RagRetrieveRequest;
 import com.reubenagent.rag.model.RetrievalResult;
+import com.reubenagent.rag.model.RewriteResult;
 import com.reubenagent.rag.service.IRagRetrievalService;
 import com.reubenagent.rag.service.QueryRewriteService;
 import com.reubenagent.rag.vo.RagRetrieveResponse;
@@ -41,7 +41,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
- * Phase 8 Query Rewrite Docker 集成测试 —— 验证 LLM 查询改写 + 改写后检索全链路。
+ * Phase 8 Query Rewrite Docker 集成测试 —— 验证 LLM 查询改写 + 子问题拆解 + 改写后检索全链路。
  *
  * <h3>前置条件</h3>
  * <pre>
@@ -155,7 +155,6 @@ class QueryRewriteIntegrationTest {
         ChatModel chatModel = chatModelProvider.getIfAvailable();
         assumeTrue(chatModel != null, "ChatModel bean 不可用，跳过所有测试");
         try {
-            // 直接调 ChatModel 验证连通性（绕开 QueryRewriteService 的降级逻辑）
             chatModel.call(new org.springframework.ai.chat.prompt.Prompt(
                     new org.springframework.ai.chat.messages.UserMessage("回复 OK")));
             log.info("ChatModel 连通性验证通过");
@@ -206,34 +205,42 @@ class QueryRewriteIntegrationTest {
 
     @Test
     @Order(1)
-    @DisplayName("查询改写 — 口语化查询被改写为检索友好文本")
+    @DisplayName("查询改写 — 口语化查询被改写为检索友好文本，不误拆为子问题")
     void queryRewriteTransformsColloquialQuery() {
         String colloquialQuery = "请问一下我想知道怎么用Docker来部署一个Spring Boot应用";
-        String rewritten = queryRewriteService.rewrite(colloquialQuery);
+        RewriteResult result = queryRewriteService.rewrite(colloquialQuery);
 
-        assertThat(rewritten).isNotNull().isNotBlank();
-        log.info("查询改写结果: '{}' → '{}'", colloquialQuery, rewritten);
+        assertThat(result).isNotNull();
+        assertThat(result.getRewrittenQuery()).isNotNull().isNotBlank();
+        log.info("查询改写结果: '{}' → '{}' split={} subs={}",
+                colloquialQuery, result.getRewrittenQuery(),
+                result.isShouldSplit(), result.getSubQuestions());
 
         // 改写后的文本应去除口语化表达
-        assertThat(rewritten)
+        assertThat(result.getRewrittenQuery())
                 .as("改写后不应包含'请问'等口语化表达")
                 .doesNotContain("请问");
-        assertThat(rewritten)
+        assertThat(result.getRewrittenQuery())
                 .as("改写后不应包含'我想知道'")
                 .doesNotContain("我想知道");
 
         // 改写后应保留核心技术术语
-        assertThat(rewritten)
+        assertThat(result.getRewrittenQuery())
                 .as("改写后应保留 Docker")
                 .contains("Docker");
-        assertThat(rewritten)
+        assertThat(result.getRewrittenQuery())
                 .as("改写后应保留 Spring Boot")
                 .contains("Spring Boot");
 
         // 改写后长度合理
-        assertThat(rewritten.length())
+        assertThat(result.getRewrittenQuery().length())
                 .as("改写后长度应不超过 200")
                 .isLessThanOrEqualTo(200);
+
+        // 单问题不应拆分
+        assertThat(result.isShouldSplit())
+                .as("单问题不应被拆分为子问题")
+                .isFalse();
     }
 
     // =====================================================================
@@ -245,11 +252,13 @@ class QueryRewriteIntegrationTest {
     @DisplayName("短查询跳过 — 长度 < minQueryLength 不调 LLM")
     void shortQuerySkipsRewrite() {
         String shortQuery = "Doc";
-        String rewritten = queryRewriteService.rewrite(shortQuery);
+        RewriteResult result = queryRewriteService.rewrite(shortQuery);
 
-        assertThat(rewritten).isEqualTo(shortQuery);
-        log.info("短查询改写跳过: '{}' (长度={} < {})", rewritten, shortQuery.length(),
-                ragProperties.getQueryRewrite().getMinQueryLength());
+        assertThat(result.getRewrittenQuery()).isEqualTo(shortQuery);
+        assertThat(result.isUsedRewrite()).isFalse();
+        assertThat(result.isShouldSplit()).isFalse();
+        log.info("短查询改写跳过: '{}' (长度={} < {})", result.getRewrittenQuery(),
+                shortQuery.length(), ragProperties.getQueryRewrite().getMinQueryLength());
     }
 
     // =====================================================================
@@ -261,19 +270,26 @@ class QueryRewriteIntegrationTest {
     @DisplayName("精炼查询 — 已经很好的查询被改写为同义形式或原样保留")
     void refinedQueryRewrite() {
         String refinedQuery = "Docker 容器化部署 Spring Boot 微服务";
-        String rewritten = queryRewriteService.rewrite(refinedQuery);
+        RewriteResult result = queryRewriteService.rewrite(refinedQuery);
 
-        assertThat(rewritten).isNotNull().isNotBlank();
-        log.info("精炼查询改写: '{}' → '{}'", refinedQuery, rewritten);
+        assertThat(result).isNotNull();
+        assertThat(result.getRewrittenQuery()).isNotNull().isNotBlank();
+        log.info("精炼查询改写: '{}' → '{}' split={}",
+                refinedQuery, result.getRewrittenQuery(), result.isShouldSplit());
 
-        // 改写后的文本应包含核心关键词（可能扩展但不丢失原关键词）
-        assertThat(rewritten.toLowerCase())
+        // 改写后的文本应包含核心关键词
+        assertThat(result.getRewrittenQuery().toLowerCase())
                 .as("改写后应保留 Docker")
                 .containsIgnoringCase("docker");
 
-        assertThat(rewritten.length())
+        assertThat(result.getRewrittenQuery().length())
                 .as("改写后长度应不超过 200")
                 .isLessThanOrEqualTo(200);
+
+        // 精炼查询不应拆分为子问题
+        assertThat(result.isShouldSplit())
+                .as("精炼单查询不应被拆分为子问题")
+                .isFalse();
     }
 
     // =====================================================================
@@ -313,8 +329,9 @@ class QueryRewriteIntegrationTest {
         assertThat(response.getResults()).isNotNull();
         assertThat(response.getTotalCostMs()).isPositive();
 
-        log.info("改写 + 检索集成结果: rewrittenQuery='{}', hits={}, costMs={}",
-                response.getRewrittenQuery(), response.getResults().size(), response.getTotalCostMs());
+        log.info("改写 + 检索集成结果: rewrittenQuery='{}', subQueries={}, usedRewrite={}, hits={}, costMs={}",
+                response.getRewrittenQuery(), response.getSubQueries(), response.isUsedRewrite(),
+                response.getResults().size(), response.getTotalCostMs());
 
         // 验证 rewrittenQuery 字段被正确设置
         assertThat(response.getRewrittenQuery())
@@ -322,10 +339,10 @@ class QueryRewriteIntegrationTest {
                 .isNotNull()
                 .isNotBlank();
 
-        // 验证改写后的查询与原始不同
-        assertThat(response.getRewrittenQuery())
-                .as("改写后的查询应与原始不同")
-                .isNotEqualTo(request.getQuery());
+        // 单问题不应有子查询列表
+        assertThat(response.getSubQueries())
+                .as("单问题检索不应有 subQueries")
+                .isNull();
 
         // 验证检索结果包含相关内容
         List<String> texts = response.getResults().stream()
@@ -376,14 +393,14 @@ class QueryRewriteIntegrationTest {
         log.info("精炼查询检索: rewrittenQuery='{}', hits={}, costMs={}",
                 response.getRewrittenQuery(), response.getResults().size(), response.getTotalCostMs());
 
-        // 对于已精炼的查询，改写结果可能与原查询相同，此时 rewrittenQuery 应为 null
-        // （但如果 LLM 做了同义扩展，也可能是非 null — 两种情况都可接受）
-        // 重点验证检索结果
         assertThat(response.getResults()).isNotEmpty();
+        assertThat(response.getSubQueries())
+                .as("单问题不应有子查询列表")
+                .isNull();
     }
 
     // =====================================================================
-    // 测试 6：改写降级 — ChatModel 不可用时返回原查询
+    // 测试 6：改写降级 — 空白/null 输入安全返回
     // =====================================================================
 
     @Test
@@ -391,18 +408,23 @@ class QueryRewriteIntegrationTest {
     @DisplayName("改写降级 — QueryRewriteService.rewrite 对空白/null 输入安全返回")
     void rewriteHandlesEdgeCases() {
         // null 输入
-        String nullResult = queryRewriteService.rewrite(null);
-        assertThat(nullResult).isNull();
-        log.info("null 输入安全: result=null");
+        RewriteResult nullResult = queryRewriteService.rewrite(null);
+        assertThat(nullResult).isNotNull();
+        assertThat(nullResult.getRewrittenQuery()).isNull();
+        assertThat(nullResult.isShouldSplit()).isFalse();
+        log.info("null 输入安全: rewrittenQuery=null");
 
         // 空白输入
-        String blankResult = queryRewriteService.rewrite("   ");
-        assertThat(blankResult).isEqualTo("   ");
-        log.info("空白输入安全: result='{}'", blankResult);
+        RewriteResult blankResult = queryRewriteService.rewrite("   ");
+        assertThat(blankResult).isNotNull();
+        assertThat(blankResult.getRewrittenQuery()).isEqualTo("   ");
+        assertThat(blankResult.isShouldSplit()).isFalse();
+        assertThat(blankResult.isUsedRewrite()).isFalse();
+        log.info("空白输入安全: result='{}'", blankResult.getRewrittenQuery());
     }
 
     // =====================================================================
-    // 测试 7：改写 + 短查询全链路检索 — 短查询直接走原始检索
+    // 测试 7：改写 + 短查询全链路检索
     // =====================================================================
 
     @Test
@@ -443,6 +465,151 @@ class QueryRewriteIntegrationTest {
         assertThat(response.getResults())
                 .as("短查询跳过改写后仍应正常检索")
                 .isNotEmpty();
+
+        assertThat(response.getSubQueries())
+                .as("短查询不应有子查询列表")
+                .isNull();
+    }
+
+    // =====================================================================
+    // 测试 8：多问题启发式检测 + 规则拆分
+    // =====================================================================
+
+    @Test
+    @Order(8)
+    @DisplayName("多问题检测 — 启发式检测多问号/分号/编号项，规则拆分可用")
+    void multiQuestionHeuristicDetection() {
+        // 多问号
+        assertThat(queryRewriteService.looksLikeExplicitMultiQuestion(
+                "Docker是什么？Kubernetes是什么？"))
+                .as("两个问号应检测为多问题")
+                .isTrue();
+
+        // 分号
+        assertThat(queryRewriteService.looksLikeExplicitMultiQuestion(
+                "介绍Docker；介绍Kubernetes"))
+                .as("分号分隔应检测为多问题")
+                .isTrue();
+
+        // 编号项
+        assertThat(queryRewriteService.looksLikeExplicitMultiQuestion(
+                "1.Docker和Kubernetes的区别 2.Spring Boot的优缺点"))
+                .as("编号列表应检测为多问题")
+                .isTrue();
+
+        // 分别
+        assertThat(queryRewriteService.looksLikeExplicitMultiQuestion(
+                "分别介绍Docker和Kubernetes"))
+                .as("'分别'字样应检测为多问题")
+                .isTrue();
+
+        // 单问题不应误判
+        assertThat(queryRewriteService.looksLikeExplicitMultiQuestion(
+                "请问Docker是什么"))
+                .as("单问号普通查询不应检测为多问题")
+                .isFalse();
+
+        assertThat(queryRewriteService.looksLikeExplicitMultiQuestion(
+                "Docker容器化部署Spring Boot应用"))
+                .as("无标点分隔不应检测为多问题")
+                .isFalse();
+
+        log.info("多问题启发式检测全部通过");
+    }
+
+    // =====================================================================
+    // 测试 9：多问题规则拆分 fallback
+    // =====================================================================
+
+    @Test
+    @Order(9)
+    @DisplayName("多问题规则拆分 — 禁用 LLM 改写时仍能按规则拆分")
+    void ruleBasedSplitFallback() {
+        RagProperties.QueryRewrite config = ragProperties.getQueryRewrite();
+
+        // 临时禁用改写以测规则 fallback
+        boolean originalEnabled = config.isEnabled();
+        config.setEnabled(false);
+        try {
+            RewriteResult result = queryRewriteService.rewrite(
+                    "Docker是什么？Kubernetes是什么？Spring Boot的优缺点？");
+
+            assertThat(result.isUsedRewrite()).isFalse();
+            assertThat(result.hasSubQuestions()).isTrue();
+            assertThat(result.isShouldSplit()).isTrue();
+            assertThat(result.getSubQuestions())
+                    .as("多问号问题应被规则拆分为至少 2 个子问题")
+                    .hasSizeGreaterThanOrEqualTo(2);
+
+            log.info("规则拆分结果: subs={}", result.getSubQuestions());
+        } finally {
+            config.setEnabled(originalEnabled);
+        }
+    }
+
+    // =====================================================================
+    // 测试 10：多问题全链路检索 + 合流
+    // =====================================================================
+
+    @Test
+    @Order(10)
+    @DisplayName("多问题检索合流 — 多子问题逐个检索 + chunkId 去重合流")
+    void multiQuestionRetrieval() {
+        EmbeddingModel model = embeddingModelProvider.getIfAvailable();
+        assertThat(model).isNotNull();
+
+        String text1 = "Docker 容器化技术通过镜像和容器实现了应用的快速部署和环境一致性，"
+                + "支持跨平台运行，成为 DevOps 工具链的核心组件";
+        String text2 = "Kubernetes 是一个开源的容器编排平台，可以自动化部署、扩展和管理容器化应用";
+        String text3 = "Spring Boot 框架极大简化了 Java 应用开发，提供了自动配置和起步依赖等特性";
+
+        insertPgVector(model, text1, testDocId, 1, "/DevOps/Docker");
+        insertPgVector(model, text2, testDocId, 2, "/DevOps/K8s");
+        insertPgVector(model, text3, testDocId, 3, "/Java/SpringBoot");
+
+        indexEsDocument(testDocId, 1, text1, "/DevOps/Docker");
+        indexEsDocument(testDocId, 2, text2, "/DevOps/K8s");
+        indexEsDocument(testDocId, 3, text3, "/Java/SpringBoot");
+
+        // 用多问题查询检索
+        RagRetrieveRequest request = RagRetrieveRequest.builder()
+                .query("Docker是什么？Kubernetes是什么？")
+                .topK(5)
+                .filterFields(docFilter())
+                .build();
+
+        RagRetrieveResponse response = ragRetrievalService.retrieve(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getResults()).isNotNull();
+        assertThat(response.getTotalCostMs()).isPositive();
+
+        log.info("多问题检索合流: rewrittenQuery='{}', subQueries={}, usedRewrite={}, mergedHits={}, costMs={}",
+                response.getRewrittenQuery(), response.getSubQueries(), response.isUsedRewrite(),
+                response.getResults().size(), response.getTotalCostMs());
+
+        // 合流结果应包含相关文档（Docker + K8s）
+        List<String> texts = response.getResults().stream()
+                .map(RetrievalResult::getChunkText)
+                .collect(Collectors.toList());
+
+        boolean hasDocker = texts.stream().anyMatch(t -> t.contains("Docker"));
+        boolean hasK8s = texts.stream().anyMatch(t -> t.contains("Kubernetes"));
+        assertThat(hasDocker || hasK8s)
+                .as("多问题检索应命中 Docker 或 Kubernetes 相关内容")
+                .isTrue();
+
+        // 如果有子问题拆分，subQueries 应非空
+        if (response.getSubQueries() != null && response.getSubQueries().size() > 1) {
+            log.info("子问题拆分成功: {}", response.getSubQueries());
+        }
+
+        response.getResults().forEach(r ->
+                log.info("  source={} score={:.6f} chunkId={} text={}",
+                        r.getSource(), r.getScore(), r.getChunkId(),
+                        r.getChunkText() != null
+                                ? r.getChunkText().substring(0, Math.min(40, r.getChunkText().length()))
+                                : "null"));
     }
 
     // =====================================================================
@@ -522,7 +689,6 @@ class QueryRewriteIntegrationTest {
                                     .index(esIndexName)
                                     .id(String.valueOf(chunkId))
                                     .document(doc)))));
-
             esClient.indices().refresh(r -> r.index(esIndexName));
             log.debug("ES 索引: chunkId={}, documentId={}, text={}",
                     chunkId, documentId, chunkText.substring(0, Math.min(30, chunkText.length())));

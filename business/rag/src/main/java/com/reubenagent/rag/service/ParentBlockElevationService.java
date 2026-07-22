@@ -1,5 +1,6 @@
 package com.reubenagent.rag.service;
 
+import com.reubenagent.rag.config.RagProperties;
 import com.reubenagent.rag.model.RetrievalResult;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -26,13 +27,8 @@ import java.util.stream.Collectors;
  *   <li>批量查询 MySQL {@code reuben_agent_document_parent_block} 获取完整 parentText</li>
  *   <li>替换 chunkText → parentText，source → source+"+parent"</li>
  *   <li>去重：同一 parent block 只保留分数最高的一条</li>
+ *   <li>与 super-agent 对齐：按 {@code parentEvidenceMaxChars} 截断超长父块</li>
  * </ol>
- *
- * <h3>与 super-agent 的差异</h3>
- * <ul>
- *   <li>super-agent 通过 entity 层 + MyBatis-Plus 访问 —— reuben-agent 直连 MySQL JDBC，更简单</li>
- *   <li>去重用 LinkedHashMap（O(n)），保持分数优先语义</li>
- * </ul>
  *
  * @author reuben
  * @since 2026-06-22
@@ -42,10 +38,13 @@ import java.util.stream.Collectors;
 public class ParentBlockElevationService {
 
     private final JdbcTemplate mysqlJdbcTemplate;
+    private final RagProperties ragProperties;
 
     public ParentBlockElevationService(
-            @Qualifier("ragMySqlJdbcTemplate") JdbcTemplate mysqlJdbcTemplate) {
+            @Qualifier("ragMySqlJdbcTemplate") JdbcTemplate mysqlJdbcTemplate,
+            RagProperties ragProperties) {
         this.mysqlJdbcTemplate = mysqlJdbcTemplate;
+        this.ragProperties = ragProperties;
     }
 
     /**
@@ -149,18 +148,28 @@ public class ParentBlockElevationService {
         }
     }
 
-    /** 构建父块提升后的结果。 */
+    /** 构建父块提升后的结果，超长文本按配置截断。 */
     private RetrievalResult buildElevatedResult(RetrievalResult original, String parentText) {
         String newSource = (original.getSource() != null ? original.getSource() : "unknown") + "+parent";
+        int maxChars = ragProperties.getRetrieval().getParentEvidenceMaxChars();
+        String trimmed = trimText(parentText, maxChars);
         return RetrievalResult.builder()
                 .chunkId(original.getChunkId())
-                .chunkText(parentText)
+                .chunkText(trimmed)
                 .score(original.getScore())
                 .sectionPath(original.getSectionPath())
                 .documentId(original.getDocumentId())
                 .parentBlockId(original.getParentBlockId())
                 .source(newSource)
                 .build();
+    }
+
+    /** 超过 maxChars 的文本截断到 maxChars-1 + "…"，与 super-agent 对齐。 */
+    private String trimText(String text, int maxChars) {
+        if (text == null || text.length() <= maxChars) {
+            return text;
+        }
+        return text.substring(0, Math.max(0, maxChars - 1)) + "…";
     }
 
     /** 安全转换 Object → Long。 */

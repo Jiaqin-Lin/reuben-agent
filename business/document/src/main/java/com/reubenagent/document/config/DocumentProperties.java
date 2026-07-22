@@ -79,6 +79,8 @@ public class DocumentProperties {
         private Integer recursiveMaxChars = 3000;
         /** 触发语义切分的最小字符数 */
         private Integer semanticMinChars = 1000;
+        /** 语义切分单 chunk 最大字符数（超过上限触发切分），与 super-agent 对齐 */
+        private Integer semanticMaxChars = 2000;
         /** 低质量文档是否推荐 LLM 切分 */
         private Boolean recommendLlmWhenLowQuality = false;
         /** 递归切分重叠字符数 */

@@ -211,9 +211,9 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
     // ======================== 管线执行引擎 ========================
 
     /**
-     * 按步骤角色驱动的管线执行：遍历 steps，按 role 决定如何处理每个 step 的产出。
+     * 顺序管线执行：每步处理前一步的输出，所有步骤顺序执行（不再按 role 跳过）。
      *
-     * @param text  待切分文本
+     * @param text  待切分文本（包装为单元素 ChunkCandidate 列表后进入管线）
      * @param steps 管线步骤列表
      * @param nodes 结构节点（仅 STRUCTURE 策略使用）
      * @param stage 管线阶段标识（日志用）
@@ -223,64 +223,40 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
                                                       List<DocumentStrategyStep> steps,
                                                       List<DocumentStructureNode> nodes,
                                                       String stage) {
-        List<ChunkCandidate> result = new ArrayList<>();
+        // 将原始文本包装为初始 ChunkCandidate 列表
+        List<ChunkCandidate> current = new ArrayList<>();
+        current.add(ChunkCandidate.builder()
+                .text(text)
+                .sourceType(DocumentChunkSourceTypeEnum.ORIGINAL.getCode())
+                .build());
 
         for (DocumentStrategyStep step : steps) {
-            DocumentStrategyRoleEnum role = DocumentStrategyRoleEnum.getFromCode(step.getStrategyRole());
-
-            // FALLBACK：仅在前序无产出时执行
-            if (role == DocumentStrategyRoleEnum.FALLBACK && !result.isEmpty()) {
-                log.debug("跳过兜底策略: stepNo={} 前序已有产出", step.getStepNo());
-                continue;
-            }
-
-            List<ChunkCandidate> stepResult = executeSingleStep(text, step, nodes, result);
+            List<ChunkCandidate> stepResult = executeSingleStep(current, step, nodes);
 
             if (stepResult == null || stepResult.isEmpty()) {
-                log.debug("步骤无产出: stepNo={} role={} strategyType={}",
-                        step.getStepNo(), role, step.getStrategyType());
-                continue;
+                log.debug("步骤无产出，管线中止: stepNo={} stage={}", step.getStepNo(), stage);
+                break;
             }
 
-            switch (role) {
-                case PRIMARY:
-                    result = stepResult;
-                    break;
-                case OPTIMIZE:
-                    result = optimizeChunks(result, step);
-                    result = cleanupChunkList(result);
-                    break;
-                case FALLBACK:
-                    result = stepResult;
-                    break;
-                case ENHANCE:
-                    result.addAll(stepResult);
-                    result = cleanupChunkList(result);
-                    break;
-                default:
-                    result = stepResult;
-            }
-
-            log.debug("步骤执行完成: stepNo={} role={} stage={} chunkCount={}",
-                    step.getStepNo(), role, stage, result.size());
+            current = cleanupChunkList(stepResult);
+            log.debug("步骤执行完成: stepNo={} strategyType={} stage={} chunkCount={}",
+                    step.getStepNo(), step.getStrategyType(), stage, current.size());
         }
 
-        return result;
+        return current;
     }
 
     /**
-     * 根据步骤的 strategyType 将文本路由到对应的切分策略。
+     * 根据步骤的 strategyType 将 sourceList 路由到对应的切分策略。
      *
-     * @param text         待切分文本
-     * @param step         当前步骤
-     * @param nodes        结构节点
-     * @param currentChunks 当前已产出的 chunk（OPTIMIZE 步骤需要）
+     * @param sourceList 上一步产出的 chunk 列表（第一步时为包装原始文本的单元素列表）
+     * @param step       当前步骤
+     * @param nodes      结构节点
      * @return 切分结果
      */
-    private List<ChunkCandidate> executeSingleStep(String text,
+    private List<ChunkCandidate> executeSingleStep(List<ChunkCandidate> sourceList,
                                                     DocumentStrategyStep step,
-                                                    List<DocumentStructureNode> nodes,
-                                                    List<ChunkCandidate> currentChunks) {
+                                                    List<DocumentStructureNode> nodes) {
         DocumentStrategyTypeEnum type = DocumentStrategyTypeEnum.getFromCode(step.getStrategyType());
         if (type == null) {
             log.warn("未知策略类型: stepNo={} strategyType={}", step.getStepNo(), step.getStrategyType());
@@ -288,10 +264,10 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
         }
 
         return switch (type) {
-            case STRUCTURE -> applyStructureChunking(text, step, nodes);
-            case RECURSIVE -> applyRecursiveChunking(text, step);
-            case SEMANTIC -> applySemanticChunking(text, step);
-            case LLM -> applyLlmChunking(text, step);
+            case STRUCTURE -> applyStructureChunking(sourceList, step, nodes);
+            case RECURSIVE -> applyRecursiveChunking(sourceList, step);
+            case SEMANTIC -> applySemanticChunking(sourceList, step);
+            case LLM -> applyLlmChunking(sourceList, step);
         };
     }
 
@@ -303,9 +279,15 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
      * <p>PARENT 管道：以 CHAPTER 节点为边界，每个章节为一个 parent seed。
      * CHILD 管道：以段落（\\n\\n）为边界拆分文本为 child chunk。</p>
      */
-    private List<ChunkCandidate> applyStructureChunking(String text,
+    private List<ChunkCandidate> applyStructureChunking(List<ChunkCandidate> sourceList,
                                                          DocumentStrategyStep step,
                                                          List<DocumentStructureNode> nodes) {
+        // 从 sourceList 拼接完整文本
+        String text = sourceList.stream()
+                .map(ChunkCandidate::getText)
+                .filter(t -> t != null && !t.isBlank())
+                .collect(Collectors.joining("\n"));
+
         boolean isParent = DocumentStrategyPipelineTypeEnum.PARENT.getStringCode()
                 .equals(step.getPipelineType());
 
@@ -411,15 +393,31 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
     // ======================== 策略：递归切分 ========================
 
     /**
-     * 递归层级切分：段落 → 句子 → 固定窗口 + overlap。
+     * 递归层级切分：遍历 sourceList，对超过 maxChars 的 chunk 递归拆分，
+     * 未超过的保持不变。子 chunk 继承父 chunk 的元数据。
      */
-    private List<ChunkCandidate> applyRecursiveChunking(String text, DocumentStrategyStep step) {
+    private List<ChunkCandidate> applyRecursiveChunking(List<ChunkCandidate> sourceList,
+                                                         DocumentStrategyStep step) {
         int maxChars = documentProperties.getStrategy().getRecursiveMaxChars();
         int overlapChars = documentProperties.getStrategy().getRecursiveOverlapChars();
 
-        List<ChunkCandidate> candidates = new ArrayList<>();
-        recursiveSplit(text, maxChars, overlapChars, candidates);
-        return candidates;
+        List<ChunkCandidate> result = new ArrayList<>();
+        for (ChunkCandidate source : sourceList) {
+            if (source.getText() == null || source.getText().isBlank()) {
+                continue;
+            }
+            if (source.getText().length() <= maxChars) {
+                result.add(source);
+            } else {
+                List<ChunkCandidate> splits = new ArrayList<>();
+                recursiveSplit(source.getText(), maxChars, overlapChars, splits);
+                for (ChunkCandidate split : splits) {
+                    copyMetadataIfAbsent(split, source);
+                }
+                result.addAll(splits);
+            }
+        }
+        return result;
     }
 
     /**
@@ -493,13 +491,34 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
     // ======================== 策略：语义切分 ========================
 
     /**
-     * 基于相邻句子 Jaccard 相似度的语义切分。
-     *
-     * <p>以句子为最小单元，计算相邻句间词袋 Jaccard 相似度，
-     * 低于阈值的边界作为语义断点进行切分。</p>
+     * 语义切分：遍历 sourceList，对每个 chunk 按语义边界拆分。
+     * 子 chunk 继承父 chunk 的元数据。
      */
-    private List<ChunkCandidate> applySemanticChunking(String text, DocumentStrategyStep step) {
+    private List<ChunkCandidate> applySemanticChunking(List<ChunkCandidate> sourceList,
+                                                        DocumentStrategyStep step) {
         double threshold = documentProperties.getStrategy().getSemanticSimilarityThreshold();
+        int maxChars = documentProperties.getStrategy().getSemanticMaxChars();
+
+        List<ChunkCandidate> result = new ArrayList<>();
+        for (ChunkCandidate source : sourceList) {
+            String text = source.getText();
+            if (text == null || text.isBlank()) {
+                continue;
+            }
+            List<ChunkCandidate> splits = semanticChunkText(text, threshold, maxChars);
+            for (ChunkCandidate split : splits) {
+                copyMetadataIfAbsent(split, source);
+            }
+            result.addAll(splits);
+        }
+        return result;
+    }
+
+    /**
+     * 对单段文本执行语义切分的核心逻辑：
+     * 计算相邻句间 Jaccard 相似度，低于阈值的边界作为断点切分。
+     */
+    private List<ChunkCandidate> semanticChunkText(String text, double threshold, int maxChars) {
         List<String> sentences = splitSentences(text);
 
         if (sentences.size() <= 1) {
@@ -518,7 +537,7 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
         }
         breakpoints.add(sentences.size()); // 结束
 
-        // 按断点合并句子为 chunk，跳过过小块
+        // 按断点合并句子为 chunk，跳过过小块；超过 maxChars 的 segment 内部再切分
         int minChars = 50; // 最小 chunk 字符数，避免碎片化
         List<ChunkCandidate> candidates = new ArrayList<>();
         StringBuilder buffer = new StringBuilder();
@@ -537,6 +556,28 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
 
             String segText = segment.toString().trim();
             if (segText.isEmpty()) {
+                continue;
+            }
+
+            // 当前 segment 超过 maxChars → 先 flush buffer，再按句子边界强制切分
+            if (segText.length() > maxChars) {
+                if (!buffer.isEmpty()) {
+                    candidates.add(new ChunkCandidate(
+                            null, buffer.toString().trim(),
+                            DocumentChunkSourceTypeEnum.ORIGINAL.getCode()));
+                    buffer.setLength(0);
+                }
+                candidates.addAll(splitLongSegment(sentences, segmentStart, segmentEnd, maxChars));
+                segmentStart = segmentEnd;
+                continue;
+            }
+
+            // 合并后可能超过 maxChars → 先 flush buffer，再以 segment 为新 buffer
+            if (!buffer.isEmpty() && buffer.length() + segText.length() > maxChars) {
+                candidates.add(new ChunkCandidate(
+                        null, buffer.toString().trim(),
+                        DocumentChunkSourceTypeEnum.ORIGINAL.getCode()));
+                buffer = new StringBuilder(segText);
                 continue;
             }
 
@@ -563,26 +604,74 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
         return candidates;
     }
 
+    /**
+     * 对超过 maxChars 的语义 segment 按句子边界强制切分为多个 chunk。
+     * 以 maxChars 为窗口滑动，遇到句子边界尽可能提前切分。
+     */
+    private List<ChunkCandidate> splitLongSegment(List<String> allSentences,
+                                                  int segmentStart, int segmentEnd,
+                                                  int maxChars) {
+        List<ChunkCandidate> result = new ArrayList<>();
+        StringBuilder buf = new StringBuilder();
+        for (int i = segmentStart; i < segmentEnd; i++) {
+            String sentence = allSentences.get(i);
+            if (buf.length() + sentence.length() > maxChars && !buf.isEmpty()) {
+                result.add(new ChunkCandidate(
+                        null, buf.toString().trim(),
+                        DocumentChunkSourceTypeEnum.ORIGINAL.getCode()));
+                buf.setLength(0);
+            }
+            if (!buf.isEmpty()) {
+                buf.append(" ");
+            }
+            buf.append(sentence);
+        }
+        if (!buf.isEmpty()) {
+            result.add(new ChunkCandidate(
+                    null, buf.toString().trim(),
+                    DocumentChunkSourceTypeEnum.ORIGINAL.getCode()));
+        }
+        return result;
+    }
+
     // ======================== 策略：LLM 切分 ========================
 
     /**
-     * 使用大模型识别语义断点进行切分。
-     *
-     * <p>将文本按 LLM 输入长度限制分段，每段发送给 LLM 识别断点，
-     * 解析返回的断点索引列表后切分。</p>
+     * LLM 切分：遍历 sourceList，对每个 chunk 使用大模型识别语义断点。
+     * 子 chunk 继承父 chunk 的元数据。
      */
-    private List<ChunkCandidate> applyLlmChunking(String text, DocumentStrategyStep step) {
+    private List<ChunkCandidate> applyLlmChunking(List<ChunkCandidate> sourceList,
+                                                   DocumentStrategyStep step) {
         int maxInputChars = documentProperties.getStrategy().getLlmMaxInputChars();
 
+        List<ChunkCandidate> result = new ArrayList<>();
+        for (ChunkCandidate source : sourceList) {
+            String text = source.getText();
+            if (text == null || text.isBlank()) {
+                continue;
+            }
+            List<ChunkCandidate> splits = llmChunkText(text, step, maxInputChars);
+            for (ChunkCandidate split : splits) {
+                copyMetadataIfAbsent(split, source);
+            }
+            result.addAll(splits);
+        }
+        return result;
+    }
+
+    /**
+     * 对单段文本执行 LLM 切分的核心逻辑。
+     */
+    private List<ChunkCandidate> llmChunkText(String text, DocumentStrategyStep step, int maxInputChars) {
         if (text.length() <= maxInputChars) {
-            return llmChunkSingleSegment(text);
+            return llmChunkSingleSegment(text, step);
         }
 
         // 文本过长时，先按段落粗切为多个 LLM 输入段
         List<String> segments = splitForLlmInput(text, maxInputChars);
         List<ChunkCandidate> allCandidates = new ArrayList<>();
         for (String segment : segments) {
-            List<ChunkCandidate> segmentCandidates = llmChunkSingleSegment(segment);
+            List<ChunkCandidate> segmentCandidates = llmChunkSingleSegment(segment, step);
             allCandidates.addAll(segmentCandidates);
         }
         return allCandidates;
@@ -590,8 +679,11 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
 
     /**
      * 对单段文本调用 LLM 识别语义断点。
+     *
+     * <p>与 super-agent 对齐：LLM 失败时降级到语义切块（Jaccard 相似度），
+     * 而非 per-sentence 碎片化切块。</p>
      */
-    private List<ChunkCandidate> llmChunkSingleSegment(String text) {
+    private List<ChunkCandidate> llmChunkSingleSegment(String text, DocumentStrategyStep step) {
         List<String> sentences = splitSentences(text);
         if (sentences.size() <= 1) {
             return List.of(new ChunkCandidate(
@@ -617,13 +709,14 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
             List<Integer> breakpoints = parseLlmBreakpoints(content, sentences.size());
             return buildChunksFromBreakpoints(sentences, breakpoints);
         } catch (Exception e) {
-            log.error("LLM 切分失败，降级为递归切分", e);
-            // 降级：按句子直接作为 chunk
-            return sentences.stream()
-                    .filter(s -> !s.isBlank())
-                    .map(s -> new ChunkCandidate(
-                            null, s.trim(), DocumentChunkSourceTypeEnum.ORIGINAL.getCode()))
-                    .collect(Collectors.toList());
+            log.error("LLM 切分失败，降级为语义切分", e);
+            // 包装为 List<ChunkCandidate> 以匹配新签名
+            List<ChunkCandidate> fallbackSource = List.of(
+                    ChunkCandidate.builder()
+                            .text(text)
+                            .sourceType(DocumentChunkSourceTypeEnum.ORIGINAL.getCode())
+                            .build());
+            return applySemanticChunking(fallbackSource, step);
         }
     }
 
@@ -744,84 +837,29 @@ public class DocumentStrategyServiceImpl implements IDocumentStrategyService {
         return segments;
     }
 
-    // ======================== OPTIMIZE 步骤：合并/拆分 ========================
+    // ======================== 辅助方法 ========================
 
     /**
-     * 优化 chunk 列表：将过小的相邻 chunk 合并，将过大的 chunk 拆分。
+     * 将 source 的非空元数据字段复制到 target（仅当 target 对应字段为空时）。
+     * 用于拆分后的子 chunk 继承父 chunk 的章节归属等元数据。
      */
-    private List<ChunkCandidate> optimizeChunks(List<ChunkCandidate> chunks,
-                                                 DocumentStrategyStep step) {
-        if (chunks == null || chunks.isEmpty()) {
-            return chunks;
+    private void copyMetadataIfAbsent(ChunkCandidate target, ChunkCandidate source) {
+        if (target.getSectionPath() == null && source.getSectionPath() != null) {
+            target.setSectionPath(source.getSectionPath());
         }
-
-        int maxChars = documentProperties.getStrategy().getRecursiveMaxChars();
-        int overlapChars = documentProperties.getStrategy().getRecursiveOverlapChars();
-        int minChars = Math.max(50, maxChars / 10);
-
-        List<ChunkCandidate> optimized = new ArrayList<>();
-        ChunkCandidate buffer = null;
-
-        for (ChunkCandidate chunk : chunks) {
-            if (chunk.getText() == null || chunk.getText().isBlank()) {
-                continue;
-            }
-
-            // 过大 → 拆分
-            if (chunk.getText().length() > maxChars) {
-                if (buffer != null) {
-                    optimized.add(buffer);
-                    buffer = null;
-                }
-                List<ChunkCandidate> splits = new ArrayList<>();
-                recursiveSplit(chunk.getText(), maxChars, overlapChars, splits);
-                // 继承父 chunk 的元数据
-                for (ChunkCandidate split : splits) {
-                    split.setSectionPath(chunk.getSectionPath());
-                    split.setStructureNodeId(chunk.getStructureNodeId());
-                    split.setStructureNodeType(chunk.getStructureNodeType());
-                    split.setCanonicalPath(chunk.getCanonicalPath());
-                    split.setItemIndex(chunk.getItemIndex());
-                }
-                optimized.addAll(splits);
-                continue;
-            }
-
-            // 过小 → 尝试与 buffer 合并
-            if (chunk.getText().length() < minChars) {
-                if (buffer == null) {
-                    buffer = ChunkCandidate.builder()
-                            .sectionPath(chunk.getSectionPath())
-                            .text(chunk.getText())
-                            .sourceType(chunk.getSourceType())
-                            .build();
-                } else {
-                    buffer.setText(buffer.getText() + "\n" + chunk.getText());
-                }
-                continue;
-            }
-
-            // 正常大小
-            if (buffer != null) {
-                // 检查 buffer 是否可以独立成块或与当前 chunk 合并
-                if (buffer.getText().length() < minChars) {
-                    chunk.setText(buffer.getText() + "\n" + chunk.getText());
-                } else {
-                    optimized.add(buffer);
-                }
-                buffer = null;
-            }
-            optimized.add(chunk);
+        if (target.getStructureNodeId() == null && source.getStructureNodeId() != null) {
+            target.setStructureNodeId(source.getStructureNodeId());
         }
-
-        if (buffer != null) {
-            optimized.add(buffer);
+        if (target.getStructureNodeType() == null && source.getStructureNodeType() != null) {
+            target.setStructureNodeType(source.getStructureNodeType());
         }
-
-        return optimized;
+        if (target.getCanonicalPath() == null && source.getCanonicalPath() != null) {
+            target.setCanonicalPath(source.getCanonicalPath());
+        }
+        if (target.getItemIndex() == null && source.getItemIndex() != null) {
+            target.setItemIndex(source.getItemIndex());
+        }
     }
-
-    // ======================== 辅助方法 ========================
 
     /**
      * 把父块（parent seed）的章节元数据透传给子 chunk。

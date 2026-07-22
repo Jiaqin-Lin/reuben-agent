@@ -33,4 +33,12 @@ public class RagRetrieveResponse {
     /** 改写后的查询文本（可观测），如果未改写则为 null */
     @Schema(description = "改写后的查询文本", example = "Docker 容器化技术 应用部署 CI/CD 流水线")
     private String rewrittenQuery;
+
+    /** 子查询列表（仅当查询被拆分为多个子问题时非 null） */
+    @Schema(description = "子查询列表")
+    private List<String> subQueries;
+
+    /** 是否经过了 LLM 改写 */
+    @Schema(description = "是否经过 LLM 改写")
+    private boolean usedRewrite;
 }

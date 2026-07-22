@@ -6,6 +6,7 @@ import com.reubenagent.rag.config.RagProperties;
 import com.reubenagent.rag.dto.RagRetrieveRequest;
 import com.reubenagent.rag.enums.RagErrorCode;
 import com.reubenagent.rag.model.RetrievalResult;
+import com.reubenagent.rag.model.RewriteResult;
 import com.reubenagent.rag.service.IRagRetrievalService;
 import com.reubenagent.rag.service.KeywordRetrievalChannel;
 import com.reubenagent.rag.service.ParentBlockElevationService;
@@ -19,6 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
@@ -33,6 +35,7 @@ import java.util.concurrent.TimeUnit;
  *   <li>超时不吞异常 → {@code exceptionally} 降级，一个通道炸另一个照常返回</li>
  *   <li>用 {@link CompletableFuture} 默认 ForkJoinPool，v1 不引入自定义线程池</li>
  *   <li>证据门控、查询改写、父块提升各司其职，Pipeline 清晰可测</li>
+ *   <li>子问题拆解：改写阶段产出多子问题时，逐子问题检索 + chunkId 去重合流</li>
  * </ul>
  *
  * @author reuben
@@ -53,91 +56,59 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
 
     @Override
     public RagRetrieveResponse retrieve(RagRetrieveRequest request) {
-        // 阶段 1：参数校验
         validateRequest(request);
 
         long start = System.currentTimeMillis();
 
         RagProperties.Retrieval retrievalConfig = ragProperties.getRetrieval();
-        int vectorTopK = retrievalConfig.getVectorTopK();
-        int keywordTopK = retrievalConfig.getKeywordTopK();
+        int candidateTopK = retrievalConfig.getCandidateTopK();
+        // 通道检索数至少为 candidateTopK，确保 Rerank 有足够候选可排
+        int vectorTopK = Math.max(retrievalConfig.getVectorTopK(), candidateTopK);
+        int keywordTopK = Math.max(retrievalConfig.getKeywordTopK(), candidateTopK);
         int finalTopK = request.getTopK() != null ? request.getTopK() : retrievalConfig.getFinalTopK();
         int rrfK = retrievalConfig.getRrfK();
         long timeoutMs = retrievalConfig.getChannelTimeoutMs();
         Map<String, String> filters = request.getFilterFields();
 
         try {
-            // 阶段 2：Query Rewrite — LLM 改写查询，提升召回命中率
+            // 阶段 2：Query Rewrite — LLM 改写查询，可能拆分为子问题
             String originalQuery = request.getQuery();
-            String searchQuery = queryRewriteService.rewrite(originalQuery);
-            String rewrittenQuery = searchQuery.equals(originalQuery) ? null : searchQuery;
+            RewriteResult rewriteResult = queryRewriteService.rewrite(originalQuery);
+            String rewrittenQuery = rewriteResult.isUsedRewrite()
+                    ? rewriteResult.getRewrittenQuery() : null;
             if (rewrittenQuery != null) {
-                log.info("查询改写: '{}' → '{}'", originalQuery, rewrittenQuery);
+                log.info("查询改写: '{}' → '{}' subs={} split={}",
+                        originalQuery, rewrittenQuery,
+                        rewriteResult.getSubQuestions().size(), rewriteResult.isShouldSplit());
             }
 
-            // 阶段 3：并行调用两个通道
-            String finalSearchQuery = searchQuery;
-            CompletableFuture<List<RetrievalResult>> vectorFuture =
-                    CompletableFuture.supplyAsync(() ->
-                            vectorChannel.retrieve(finalSearchQuery, vectorTopK, filters))
-                            .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                            .exceptionally(ex -> {
-                                log.warn("向量通道异常/超时，降级返回空列表: {}", ex.getMessage());
-                                return List.of();
-                            });
-
-            CompletableFuture<List<RetrievalResult>> keywordFuture =
-                    CompletableFuture.supplyAsync(() ->
-                            keywordChannel.retrieve(finalSearchQuery, keywordTopK, filters))
-                            .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-                            .exceptionally(ex -> {
-                                log.warn("关键词通道异常/超时，降级返回空列表: {}", ex.getMessage());
-                                return List.of();
-                            });
-
-            // 阶段 4：等待两个通道都完成（或超时降级）
-            CompletableFuture.allOf(vectorFuture, keywordFuture).join();
-
-            List<RetrievalResult> vectorResults = vectorFuture.get();
-            List<RetrievalResult> keywordResults = keywordFuture.get();
-
-            log.debug("双通道检索完成: vector={}, keyword={}", vectorResults.size(), keywordResults.size());
-
-            // 阶段 5：Evidence Gates — 过滤弱相关噪声
-            List<RetrievalResult> gatedVector = applyEvidenceGates(
-                    vectorResults, retrievalConfig.getMinVectorSimilarity(),
-                    retrievalConfig.getKeywordRelativeScoreFloor());
-
-            List<RetrievalResult> gatedKeyword = applyEvidenceGates(
-                    keywordResults, retrievalConfig.getMinVectorSimilarity(),
-                    retrievalConfig.getKeywordRelativeScoreFloor());
-
-            // 阶段 6：RRF 融合（暂不截断，留给 elevation 后）
-            int fusionLimit = gatedVector.size() + gatedKeyword.size();
-            List<RetrievalResult> fused = rrfFusionService.fuse(
-                    gatedVector, gatedKeyword, rrfK, Math.max(fusionLimit, finalTopK));
-
-            // 阶段 7：Parent Block Elevation — 小 chunk 替换为父块完整文本
-            List<RetrievalResult> elevated = elevationService.elevate(fused);
-
-            // 阶段 8：Rerank — cross-encoder 精排
-            List<RetrievalResult> reranked = rerankService.rerank(originalQuery, elevated);
-
-            // 阶段 9：截断到 finalTopK
-            List<RetrievalResult> results = reranked.size() > finalTopK
-                    ? new ArrayList<>(reranked.subList(0, finalTopK))
-                    : reranked;
+            // 阶段 3-9：执行检索（拆分为多子问题或单次检索）
+            List<RetrievalResult> allResults;
+            List<String> subQueries = resolveSubQueries(rewriteResult);
+            if (subQueries.size() <= 1) {
+                String searchQuery = rewriteResult.getRewrittenQuery();
+                allResults = executeSingleQueryPipeline(
+                        searchQuery, originalQuery, vectorTopK, keywordTopK,
+                        finalTopK, candidateTopK, rrfK, timeoutMs, filters);
+            } else {
+                allResults = executeMultiQueryPipeline(
+                        subQueries, vectorTopK, keywordTopK,
+                        finalTopK, candidateTopK, rrfK, timeoutMs, filters);
+            }
 
             long totalCostMs = System.currentTimeMillis() - start;
 
-            log.info("RAG 检索完成: query='{}', rewritten={}, finalTopK={}, fused={}, elevated={}, reranked={}, final={}, costMs={}",
-                    originalQuery, rewrittenQuery != null, finalTopK,
-                    fused.size(), elevated.size(), reranked.size(), results.size(), totalCostMs);
+            log.info("RAG 检索完成: query='{}', rewritten={}, subQueries={}, final={}, costMs={}",
+                    originalQuery, rewrittenQuery != null, subQueries.size(),
+                    allResults.size(), totalCostMs);
 
             return RagRetrieveResponse.builder()
-                    .results(results)
+                    .results(allResults)
                     .totalCostMs(totalCostMs)
                     .rewrittenQuery(rewrittenQuery)
+                    .subQueries(rewriteResult.isShouldSplit() && subQueries.size() > 1
+                            ? subQueries : null)
+                    .usedRewrite(rewriteResult.isUsedRewrite())
                     .build();
 
         } catch (Exception e) {
@@ -154,6 +125,123 @@ public class RagRetrievalServiceImpl implements IRagRetrievalService {
             throw new ValidationException("query", "查询文本不能为空");
         }
     }
+
+    /** 解析子查询列表（拆分时为多个，否则为单元素列表）。 */
+    private List<String> resolveSubQueries(RewriteResult rewriteResult) {
+        if (rewriteResult.hasSubQuestions() && rewriteResult.isShouldSplit()
+                && rewriteResult.getSubQuestions().size() > 1) {
+            return rewriteResult.getSubQuestions();
+        }
+        return List.of(rewriteResult.getRewrittenQuery());
+    }
+
+    // ======================== 单 Query 检索管线 ========================
+
+    /**
+     * 执行单次检索管线：双通道 → evidence gate → RRF 融合 → 父块提升 → Rerank → topK 截断。
+     *
+     * @param searchQuery   用于向量/关键词检索的改写查询
+     * @param rerankQuery   用于 Rerank 的查询（通常为原始查询，保留用户意图）
+     * @param candidateTopK RRF 融合后进入 Rerank 的候选数（与 super-agent 对齐）
+     */
+    private List<RetrievalResult> executeSingleQueryPipeline(
+            String searchQuery, String rerankQuery, int vectorTopK, int keywordTopK,
+            int finalTopK, int candidateTopK, int rrfK, long timeoutMs,
+            Map<String, String> filters) {
+
+        // 阶段 3：并行调用两个通道
+        CompletableFuture<List<RetrievalResult>> vectorFuture =
+                CompletableFuture.supplyAsync(() ->
+                        vectorChannel.retrieve(searchQuery, vectorTopK, filters))
+                        .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                        .exceptionally(ex -> {
+                            log.warn("向量通道异常/超时，降级返回空列表: {}", ex.getMessage());
+                            return List.of();
+                        });
+
+        CompletableFuture<List<RetrievalResult>> keywordFuture =
+                CompletableFuture.supplyAsync(() ->
+                        keywordChannel.retrieve(searchQuery, keywordTopK, filters))
+                        .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                        .exceptionally(ex -> {
+                            log.warn("关键词通道异常/超时，降级返回空列表: {}", ex.getMessage());
+                            return List.of();
+                        });
+
+        // 阶段 4：等待两个通道都完成（或超时降级）
+        CompletableFuture.allOf(vectorFuture, keywordFuture).join();
+
+        List<RetrievalResult> vectorResults = getFutureResults(vectorFuture, "向量");
+        List<RetrievalResult> keywordResults = getFutureResults(keywordFuture, "关键词");
+
+        log.debug("双通道检索完成: vector={}, keyword={}", vectorResults.size(), keywordResults.size());
+
+        // 阶段 5：Evidence Gates — 过滤弱相关噪声
+        RagProperties.Retrieval retrievalConfig = ragProperties.getRetrieval();
+        List<RetrievalResult> gatedVector = applyEvidenceGates(
+                vectorResults, retrievalConfig.getMinVectorSimilarity(),
+                retrievalConfig.getKeywordRelativeScoreFloor());
+
+        List<RetrievalResult> gatedKeyword = applyEvidenceGates(
+                keywordResults, retrievalConfig.getMinVectorSimilarity(),
+                retrievalConfig.getKeywordRelativeScoreFloor());
+
+        // 阶段 6：RRF 融合 → 保留 candidateTopK 条进入 Rerank
+        List<RetrievalResult> fused = rrfFusionService.fuse(
+                gatedVector, gatedKeyword, rrfK, candidateTopK);
+
+        // 阶段 7：Parent Block Elevation — 小 chunk 替换为父块完整文本
+        List<RetrievalResult> elevated = elevationService.elevate(fused);
+
+        // 阶段 8：Rerank — cross-encoder 精排
+        List<RetrievalResult> reranked = rerankService.rerank(rerankQuery, elevated);
+
+        // 阶段 9：截断到 finalTopK
+        return reranked.size() > finalTopK
+                ? new ArrayList<>(reranked.subList(0, finalTopK))
+                : reranked;
+    }
+
+    private List<RetrievalResult> getFutureResults(CompletableFuture<List<RetrievalResult>> future,
+                                                    String channel) {
+        try {
+            return future.get();
+        } catch (Exception e) {
+            log.warn("{}通道获取结果失败: {}", channel, e.getMessage());
+            return List.of();
+        }
+    }
+
+    // ======================== 多子问题检索 + 合流 ========================
+
+    /**
+     * 对多个子问题逐个检索，按 chunkId 去重合流，保留首次出现顺序。
+     */
+    private List<RetrievalResult> executeMultiQueryPipeline(
+            List<String> subQueries, int vectorTopK, int keywordTopK,
+            int finalTopK, int candidateTopK, int rrfK, long timeoutMs,
+            Map<String, String> filters) {
+
+        LinkedHashSet<Long> seenChunkIds = new LinkedHashSet<>();
+        List<RetrievalResult> merged = new ArrayList<>();
+
+        for (String subQuery : subQueries) {
+            List<RetrievalResult> subResults = executeSingleQueryPipeline(
+                    subQuery, subQuery, vectorTopK, keywordTopK,
+                    finalTopK, candidateTopK, rrfK, timeoutMs, filters);
+
+            for (RetrievalResult r : subResults) {
+                if (r.getChunkId() != null && seenChunkIds.add(r.getChunkId())) {
+                    merged.add(r);
+                }
+            }
+        }
+
+        log.info("多子问题检索合并: subQueries={}, mergedResults={}", subQueries.size(), merged.size());
+        return merged;
+    }
+
+    // ======================== Evidence Gates ========================
 
     /**
      * 应用证据门控，过滤弱相关噪声。

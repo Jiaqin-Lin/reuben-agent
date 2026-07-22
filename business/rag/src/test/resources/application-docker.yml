@@ -46,9 +46,11 @@ reuben:
     query-rewrite:
       enabled: true
       min-query-length: 6
+      max-sub-questions: 5
     retrieval:
       vector-top-k: 8
       keyword-top-k: 8
+      candidate-top-k: 30
       final-top-k: 5
       rrf-k: 60
       channel-timeout-ms: 5000

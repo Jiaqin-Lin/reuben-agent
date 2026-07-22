@@ -40,6 +40,8 @@ public class RagProperties {
         private boolean enabled = true;
         /** 最短触发长度（字），低于此值的查询不调用 LLM */
         private int minQueryLength = 6;
+        /** 子问题最大数量（防止 LLM 拆分过多） */
+        private int maxSubQuestions = 5;
     }
 
     /**
@@ -51,6 +53,11 @@ public class RagProperties {
         private int vectorTopK = 8;
         /** 关键词通道召回数 */
         private int keywordTopK = 8;
+        /**
+         * Rerank 候选池大小 —— 各通道至少召回此数量，RRF 融合后保留此数量进入 Rerank。
+         * 与 super-agent 对齐：增大候选池让 Rerank 有更多材料可排，提升最终 topK 质量。
+         */
+        private int candidateTopK = 30;
         /** 融合后最终返回数 */
         private int finalTopK = 5;
         /** RRF 公式 K 值 */
@@ -61,6 +68,8 @@ public class RagProperties {
         private double minVectorSimilarity = 0.45;
         /** 关键词通道相对分数下限（相对于该通道最高分的比例，0~1） */
         private double keywordRelativeScoreFloor = 0.35;
+        /** 父块提升时的最大字符数（超长文本截断到此上限，末尾加 …），与 super-agent 对齐 */
+        private int parentEvidenceMaxChars = 2000;
     }
 
     /**
